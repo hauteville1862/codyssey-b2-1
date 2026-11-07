@@ -267,9 +267,9 @@ class BudgetService:
                 "CSV의 해당 행을 고친 뒤 파일 전체를 다시 가져오세요.",
             )
         ids = self.transactions.next_ids(len(rows))
-        new = [Transaction(id=tx_id, **row) for tx_id, row in zip(ids, rows)]
-        self.transactions.replace_all(chain(self.transactions.iter_all(), new))
-        return len(new)
+        transactions = (Transaction(id=tx_id, **row) for tx_id, row in zip(ids, rows))
+        self.transactions.replace_all(chain(self.transactions.iter_all(), transactions))
+        return len(rows)
 
     def search(self, filters: SearchFilters, limit: int = 20) -> list[Transaction]:
         """파일을 끝까지 읽되, 메모리에는 최신 거래 limit건만 유지한다."""

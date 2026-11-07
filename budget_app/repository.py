@@ -140,7 +140,8 @@ class BudgetStore:
         return self._read_all().get(month)
 
     def set(self, month: str, amount: int) -> None:
-        budgets = {**self._read_all(), month: amount}
+        budgets = self._read_all()
+        budgets[month] = amount
         lines = (
             _to_line({"month": name, "amount": value}) for name, value in budgets.items()
         )
