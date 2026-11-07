@@ -126,8 +126,8 @@ def print_budget(summary: MonthlySummary) -> None:
     if summary.budget is None:
         return
     print(f"예산: {summary.budget}원 (사용률 {summary.usage_percent:.1f}%)")
-    if summary.expense > summary.budget:
-        print(f"[경고] 예산을 {summary.expense - summary.budget}원 초과했습니다.")
+    if summary.over_budget:
+        print(f"[경고] 예산을 {summary.over_budget}원 초과했습니다.")
 
 
 @handle_errors
@@ -156,7 +156,7 @@ def cmd_import(args: argparse.Namespace) -> int:
 
 @handle_errors
 def cmd_category_list(args: argparse.Namespace) -> int:
-    for name in BudgetService(args.data_dir).categories.list_all():
+    for name in BudgetService(args.data_dir).list_categories():
         print(f"- {name}")
     return 0
 

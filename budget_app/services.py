@@ -89,9 +89,16 @@ class MonthlySummary:
     expense: int
     balance: int
     top: list[tuple[str, int]]
+    budget: int | None
+    usage_percent: float | None
     has_data: bool
-    budget: int | None = None
-    usage_percent: float | None = None
+
+    @property
+    def over_budget(self) -> int:
+        """예산을 넘긴 금액. 예산이 없거나 넘지 않았으면 0이다."""
+        if self.budget is None:
+            return 0
+        return max(0, self.expense - self.budget)
 
 
 class BudgetService:
@@ -107,6 +114,9 @@ class BudgetService:
         if not self.categories.list_all():
             for name in DEFAULT_CATEGORIES:
                 self.categories.add(name)
+
+    def list_categories(self) -> list[str]:
+        return self.categories.list_all()
 
     def add_category(self, name: str) -> str:
         name = name.strip()
@@ -216,14 +226,14 @@ class BudgetService:
         budget = self.budgets.get(month)
         usage_percent = None if budget is None else round(expense / budget * 100, 1)
         return MonthlySummary(
-            month,
-            income,
-            expense,
-            income - expense,
-            ranked[:top],
-            has_data,
-            budget,
-            usage_percent,
+            month=month,
+            income=income,
+            expense=expense,
+            balance=income - expense,
+            top=ranked[:top],
+            budget=budget,
+            usage_percent=usage_percent,
+            has_data=has_data,
         )
 
     def set_budget(self, month: str, amount: str) -> int:

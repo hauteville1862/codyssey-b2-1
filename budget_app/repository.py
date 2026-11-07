@@ -128,11 +128,11 @@ class BudgetStore:
         budgets = {}
         for line_number, record in read_jsonl(self.path):
             month, amount = record.get("month"), record.get("amount")
+            if not isinstance(month, str) or type(amount) is not int:
+                raise _damaged_line(self.path, line_number)
             try:
-                if type(amount) is not int:
-                    raise _damaged_line(self.path, line_number)
                 budgets[parse_month(month)] = parse_amount(str(amount))
-            except (BudgetAppError, TypeError) as error:
+            except BudgetAppError as error:
                 raise _damaged_line(self.path, line_number) from error
         return budgets
 

@@ -290,6 +290,17 @@ class BudgetTest(QueryTestCase):
 
         self.assertIsNone(summary.budget)
         self.assertIsNone(summary.usage_percent)
+        self.assertEqual(summary.over_budget, 0)
+
+    def test_over_budget_is_amount_above_budget_or_zero(self) -> None:
+        self.add("2024-01-05", amount=1000)
+        for budget, expected in [("999", 1), ("1000", 0), ("5000", 0)]:
+            with self.subTest(budget=budget):
+                self.service.set_budget("2024-01", budget)
+
+                summary = self.service.monthly_summary("2024-01", top=5)
+
+                self.assertEqual(summary.over_budget, expected)
 
     def test_month_without_transactions_has_zero_usage(self) -> None:
         self.service.set_budget("2024-01", "500000")
@@ -297,14 +308,24 @@ class BudgetTest(QueryTestCase):
         self.assertEqual(self.service.monthly_summary("2024-01", 5).usage_percent, 0.0)
 
     def test_damaged_budget_line_reports_line_number(self) -> None:
-        (self.data_dir / "budgets.jsonl").write_text(
-            '{"month": "2024-13", "amount": 1}\n', encoding="utf-8"
-        )
+        lines = [
+            '{"month": "2024-13", "amount": 1}',
+            '{"month": 202401, "amount": 1}',
+            '{"amount": 1}',
+            '{"month": "2024-01", "amount": true}',
+            '{"month": "2024-01", "amount": "100"}',
+            '{"month": "2024-01", "amount": 0}',
+        ]
+        for line in lines:
+            with self.subTest(line=line):
+                (self.data_dir / "budgets.jsonl").write_text(
+                    line + "\n", encoding="utf-8"
+                )
 
-        with self.assertRaises(BudgetAppError) as caught:
-            self.service.budgets.get("2024-01")
+                with self.assertRaises(BudgetAppError) as caught:
+                    self.service.budgets.get("2024-01")
 
-        self.assertIn("1번째 줄", caught.exception.message)
+                self.assertIn("1번째 줄", caught.exception.message)
 
 
 class ExportTest(QueryTestCase):
