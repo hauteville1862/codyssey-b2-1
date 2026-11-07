@@ -1,7 +1,14 @@
+import argparse
+import contextlib
+import io
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from typing import Callable
+
+from budget_app.decorators import handle_errors
+from budget_app.errors import BudgetAppError
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -38,6 +45,51 @@ class InvalidUsageTest(unittest.TestCase):
 
     def test_missing_command_prints_error_and_hint(self) -> None:
         self.assert_usage_error(run_app())
+
+
+class HandleErrorsTest(unittest.TestCase):
+    def run_failing(self, error: BaseException) -> tuple[int, str]:
+        def command(args: argparse.Namespace) -> int:
+            raise error
+
+        return self.run_command(command)
+
+    def run_command(
+        self, command: Callable[[argparse.Namespace], int]
+    ) -> tuple[int, str]:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = handle_errors(command)(argparse.Namespace())
+        return code, stderr.getvalue()
+
+    def test_returns_command_result_when_nothing_fails(self) -> None:
+        code, stderr = self.run_command(lambda args: 0)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+
+    def test_budget_app_error_prints_its_message_and_hint(self) -> None:
+        code, stderr = self.run_failing(BudgetAppError("원인 문구", "힌트 문구"))
+
+        self.assertEqual(code, 1)
+        self.assertIn("[오류] 원인 문구", stderr)
+        self.assertIn("[힌트] 힌트 문구", stderr)
+
+    def test_other_failures_print_error_and_hint_without_traceback(self) -> None:
+        failures: list[BaseException] = [
+            OSError("disk"),
+            KeyboardInterrupt(),
+            EOFError(),
+            ValueError("bug"),
+        ]
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                code, stderr = self.run_failing(failure)
+
+                self.assertEqual(code, 1)
+                self.assertIn("[오류]", stderr)
+                self.assertIn("[힌트]", stderr)
+                self.assertNotIn("Traceback", stderr)
 
 
 if __name__ == "__main__":
