@@ -81,6 +81,43 @@ class QueryTestCase(ServiceTestCase):
         return transaction.id
 
 
+class DeleteTransactionTest(QueryTestCase):
+    def transaction_ids(self) -> list[str]:
+        return [tx.id for tx in self.service.transactions.iter_all()]
+
+    def test_delete_removes_only_that_transaction(self) -> None:
+        first = self.add("2024-01-01")
+        second = self.add("2024-01-02")
+
+        self.service.delete_transaction(first)
+
+        self.assertEqual(self.transaction_ids(), [second])
+
+    def test_unknown_id_is_rejected_and_file_stays_the_same(self) -> None:
+        kept = self.add("2024-01-01")
+        path = self.data_dir / "transactions.jsonl"
+        before = path.read_bytes()
+
+        with self.assertRaises(BudgetAppError):
+            self.service.delete_transaction("TX-999999")
+
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.transaction_ids(), [kept])
+
+    def test_damaged_line_stops_delete_and_file_stays_the_same(self) -> None:
+        first = self.add("2024-01-01")
+        path = self.data_dir / "transactions.jsonl"
+        with path.open("a", encoding="utf-8") as file:
+            file.write("{broken\n")
+        before = path.read_bytes()
+
+        with self.assertRaises(BudgetAppError) as caught:
+            self.service.delete_transaction(first)
+
+        self.assertIn("2번째 줄", caught.exception.message)
+        self.assertEqual(path.read_bytes(), before)
+
+
 class SearchConditionTest(QueryTestCase):
     def setUp(self) -> None:
         super().setUp()

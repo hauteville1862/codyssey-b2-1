@@ -251,6 +251,24 @@ class SearchCommandTest(AppTestCase):
                 self.assertIn("[힌트]", result.stderr)
 
 
+class DeleteCommandTest(AppTestCase):
+    def test_delete_prints_success_and_removes_transaction(self) -> None:
+        self.run_in_data_dir("add", stdin="2024-01-01\nexpense\nfood\n1000\n\n\n")
+
+        result = self.run_in_data_dir("delete", "--id", "TX-000001")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[삭제 완료] id=TX-000001", result.stdout)
+        self.assertIn("거래 내역이 없습니다", self.run_in_data_dir("list").stdout)
+
+    def test_unknown_id_prints_error_and_hint(self) -> None:
+        result = self.run_in_data_dir("delete", "--id", "TX-999999")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("없는 데이터", result.stderr)
+        self.assertIn("[힌트]", result.stderr)
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

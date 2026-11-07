@@ -88,6 +88,13 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+def cmd_delete(args: argparse.Namespace) -> int:
+    BudgetService(args.data_dir).delete_transaction(args.id)
+    print(f"[삭제 완료] id={args.id}")
+    return 0
+
+
+@handle_errors
 def cmd_category_list(args: argparse.Namespace) -> int:
     for name in BudgetService(args.data_dir).categories.list_all():
         print(f"- {name}")
@@ -139,6 +146,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=positive_int, default=20, help="출력 개수 (기본값: 20)"
     )
     search.set_defaults(handler=cmd_search)
+
+    delete = commands.add_parser("delete", help="거래 삭제")
+    delete.add_argument("--id", required=True, help="거래 id")
+    delete.set_defaults(handler=cmd_delete)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")

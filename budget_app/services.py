@@ -100,6 +100,20 @@ class BudgetService:
         self.transactions.append(transaction)
         return transaction
 
+    def require_transaction(self, tx_id: str) -> Transaction:
+        transaction = self.transactions.find(tx_id)
+        if transaction is None:
+            raise BudgetAppError(
+                f"없는 데이터입니다: {tx_id}", "list로 거래 id를 확인하세요."
+            )
+        return transaction
+
+    def delete_transaction(self, tx_id: str) -> None:
+        self.require_transaction(tx_id)
+        self.transactions.replace_all(
+            tx for tx in self.transactions.iter_all() if tx.id != tx_id
+        )
+
     def iter_matching(self, filters: SearchFilters) -> Iterator[Transaction]:
         """조건에 맞는 거래를 한 건씩 돌려주는 제너레이터."""
         for transaction in self.transactions.iter_all():

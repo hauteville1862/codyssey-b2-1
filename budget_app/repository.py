@@ -1,6 +1,7 @@
 import json
+import os
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 from budget_app.errors import BudgetAppError
 from budget_app.models import Transaction
@@ -26,9 +27,28 @@ def read_jsonl(path: Path) -> Iterator[tuple[int, dict[str, Any]]]:
             yield line_number, record
 
 
+def _to_line(record: dict[str, Any]) -> str:
+    return json.dumps(record, ensure_ascii=False) + "\n"
+
+
 def append_jsonl(path: Path, record: dict[str, Any]) -> None:
     with path.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(record, ensure_ascii=False) + "\n")
+        file.write(_to_line(record))
+
+
+def atomic_write(path: Path, lines: Iterable[str]) -> None:
+    """임시 파일에 다 쓴 뒤 교체한다. 도중에 실패하면 원본은 그대로 남는다."""
+    temp_path = path.with_name(f"{path.name}.tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as file:
+            for line in lines:
+                file.write(line)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temp_path, path)
+    except BaseException:
+        temp_path.unlink(missing_ok=True)
+        raise
 
 
 class CategoryStore:
@@ -65,6 +85,13 @@ class TransactionRepository:
 
     def append(self, transaction: Transaction) -> None:
         append_jsonl(self.path, transaction.to_dict())
+
+    def find(self, tx_id: str) -> Transaction | None:
+        return next((tx for tx in self.iter_all() if tx.id == tx_id), None)
+
+    def replace_all(self, transactions: Iterable[Transaction]) -> None:
+        """거래 파일 전체를 주어진 거래들로 안전하게 교체한다."""
+        atomic_write(self.path, (_to_line(tx.to_dict()) for tx in transactions))
 
     def next_id(self, offset: int = 0) -> str:
         """파일을 끝까지 읽어 가장 큰 번호 다음의 id를 돌려준다."""

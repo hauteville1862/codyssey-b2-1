@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Iterator
 
 from budget_app.errors import BudgetAppError
 from budget_app.models import Transaction
@@ -80,6 +81,36 @@ class TransactionRepositoryTest(unittest.TestCase):
             list(self.repository.iter_all())
 
         self.assertIn("1번째 줄", caught.exception.message)
+
+    def test_replace_all_rewrites_file_without_temp_file(self) -> None:
+        self.repository.append(make_transaction("TX-000001"))
+        replacement = make_transaction("TX-000002")
+
+        self.repository.replace_all([replacement])
+
+        self.assertEqual(list(self.repository.iter_all()), [replacement])
+        self.assertEqual([p.name for p in self.path.parent.iterdir()], [self.path.name])
+
+    def test_failure_while_writing_keeps_original_and_removes_temp_file(self) -> None:
+        original = make_transaction("TX-000001")
+        self.repository.append(original)
+
+        def failing_transactions() -> Iterator[Transaction]:
+            yield make_transaction("TX-000002")
+            raise OSError("disk full")
+
+        with self.assertRaises(OSError):
+            self.repository.replace_all(failing_transactions())
+
+        self.assertEqual(list(self.repository.iter_all()), [original])
+        self.assertEqual([p.name for p in self.path.parent.iterdir()], [self.path.name])
+
+    def test_find_returns_matching_transaction_or_none(self) -> None:
+        transaction = make_transaction("TX-000007")
+        self.repository.append(transaction)
+
+        self.assertEqual(self.repository.find("TX-000007"), transaction)
+        self.assertIsNone(self.repository.find("TX-999999"))
 
     def test_next_id_starts_from_one(self) -> None:
         self.assertEqual(self.repository.next_id(), "TX-000001")
