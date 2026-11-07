@@ -140,6 +140,48 @@ class AddCommandTest(AppTestCase):
         self.assertEqual(self.transaction_lines(), [])
 
 
+class ListCommandTest(AppTestCase):
+    def add(self, date: str, memo: str = "") -> None:
+        result = self.run_in_data_dir(
+            "add", stdin=f"{date}\nexpense\nfood\n1000\n{memo}\n\n"
+        )
+        self.assertEqual(result.returncode, 0)
+
+    def test_list_prints_newest_first_after_restart(self) -> None:
+        self.add("2024-01-01", "오래된 거래")
+        self.add("2024-03-01", "최신 거래")
+
+        result = self.run_in_data_dir("list")
+
+        self.assertEqual(result.returncode, 0)
+        lines = result.stdout.splitlines()
+        self.assertIn("TX-000002 | 2024-03-01 | expense | food | 1000 | 최신", lines[0])
+        self.assertIn("TX-000001 | 2024-01-01", lines[1])
+
+    def test_limit_option_restricts_output(self) -> None:
+        self.add("2024-01-01")
+        self.add("2024-03-01")
+
+        result = self.run_in_data_dir("list", "--limit", "1")
+
+        self.assertEqual(len(result.stdout.splitlines()), 1)
+        self.assertIn("2024-03-01", result.stdout)
+
+    def test_limit_below_one_is_usage_error(self) -> None:
+        for value in ["0", "-1", "abc"]:
+            with self.subTest(value=value):
+                result = self.run_in_data_dir("list", f"--limit={value}")
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("[힌트]", result.stderr)
+
+    def test_empty_data_prints_notice(self) -> None:
+        result = self.run_in_data_dir("list")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("거래 내역이 없습니다", result.stdout)
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

@@ -1,10 +1,26 @@
+import heapq
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 
 from budget_app.errors import BudgetAppError
 from budget_app.models import Transaction
 from budget_app.repository import CategoryStore, TransactionRepository
 
 DEFAULT_CATEGORIES = ("food", "transport", "rent", "etc", "salary")
+
+
+@dataclass
+class SearchFilters:
+    """거래를 고르는 조건. None인 조건은 검사하지 않는다."""
+
+    month: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    category: str | None = None
+    type: str | None = None
+    q: str | None = None
+    tag: str | None = None
 
 
 class BudgetService:
@@ -58,3 +74,15 @@ class BudgetService:
         )
         self.transactions.append(transaction)
         return transaction
+
+    def iter_matching(self, filters: SearchFilters) -> Iterator[Transaction]:
+        """조건에 맞는 거래를 한 건씩 돌려주는 제너레이터."""
+        return self.transactions.iter_all()
+
+    def search(self, filters: SearchFilters, limit: int = 20) -> list[Transaction]:
+        """파일을 끝까지 읽되, 메모리에는 최신 거래 limit건만 유지한다."""
+        return heapq.nlargest(
+            limit,
+            self.iter_matching(filters),
+            key=lambda tx: (tx.date, tx.id_number),
+        )
