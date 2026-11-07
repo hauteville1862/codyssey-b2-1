@@ -66,6 +66,8 @@
 - 예산 조회용 별도 명령은 만들지 않는다. 미션 상세의 출력 설명대로 `summary`에서 조회한다.
 - `search`와 `export`에서 시작일이 종료일보다 늦으면 오류를 낸다.
 - `update`에 바꿀 필드가 하나도 없으면 오류를 낸다. `--memo ""`와 `--tags ""`는 값을 비운다.
+- 옵션으로 받은 날짜, 달, 타입, 금액도 `parse_*` 함수로 검증한다. 명령 처리 함수 안에서 검증해 오류를 `handle_errors`가 처리하게 한다.
+- 성공 메시지와 건수 출력은 미션 상세 8절 예시의 형식을 따른다. 예: `[저장 완료] id=TX-000012`, `[완료] imported=5, skipped=0`
 
 **export와 import**
 - `export`의 `--from`과 `--to`는 둘 다 있어야 한다. `--month`와 함께 주면 모든 조건을 만족하는 거래만 내보낸다.
@@ -84,6 +86,7 @@
 
 | 파일 | 책임 |
 |---|---|
+| `budget_app/__init__.py` | 패키지 표시. 내용 없음 |
 | `budget_app/__main__.py` | `python -m budget_app`의 진입점 |
 | `budget_app/cli.py` | 명령 정의, `input()`, 출력. 계산과 파일 입출력은 하지 않음 |
 | `budget_app/services.py` | 업무 규칙: 추가, 조회, 요약, 카테고리 삭제 규칙, import 검증 |
@@ -100,24 +103,26 @@
 
 **공유하는 이름**
 
-- `Transaction`: `id: str`, `type: str`, `date: str`, `amount: int`, `category: str`, `memo: str = ""`, `tags: list[str]`(기본값 빈 목록), `to_dict() -> dict`, `from_dict(data: dict) -> Transaction`
+- `Transaction`(`dataclass`): `id: str`, `type: str`, `date: str`, `amount: int`, `category: str`, `memo: str = ""`, `tags: list[str]`(기본값 빈 목록), `to_dict() -> dict`, `from_dict(data: dict) -> Transaction`
 - `BudgetAppError(message: str, hint: str)`: 프로그램이 내는 유일한 오류 클래스
 - `read_jsonl(path: Path) -> Iterator[tuple[int, dict]]`: 줄 번호와 내용을 한 줄씩 돌려준다.
 - `append_jsonl(path: Path, record: dict) -> None`
 - `atomic_write(path: Path, lines: Iterable[str]) -> None`
 - `read_csv_rows(path: Path) -> Iterator[tuple[int, dict]]`, `write_csv(path: Path, txs: Iterable[Transaction]) -> int`
-- `TransactionRepository`: `iter_all() -> Iterator[Transaction]`, `append(tx) -> None`, `next_id() -> str`, `find(tx_id) -> Transaction | None`, `replace_all(txs: Iterable[Transaction]) -> None`
+- `TransactionRepository`: `iter_all() -> Iterator[Transaction]`, `append(tx) -> None`, `next_id(offset: int = 0) -> str`, `find(tx_id) -> Transaction | None`, `replace_all(txs: Iterable[Transaction]) -> None`
 - `CategoryStore`: `list_all() -> list[str]`, `add(name) -> None`, `remove(name) -> None`
 - `BudgetStore`: `get(month) -> int | None`, `set(month, amount) -> None`
-- `SearchFilters`: `month`, `date_from`, `date_to`, `category`, `type`, `q`, `tag`(모두 `str | None`, 기본값 `None`)
+- `SearchFilters`(`dataclass`): `month`, `date_from`, `date_to`, `category`, `type`, `q`, `tag`(모두 `str | None`, 기본값 `None`)
 - `BudgetService(data_dir: Path)`: `iter_matching(filters) -> Iterator[Transaction]`, `search(filters, limit: int = 20) -> list[Transaction]`
-- `MonthlySummary`: `month`, `income`, `expense`, `balance`, `top`, `budget`, `usage_percent`, `has_data`
+- `MonthlySummary`(`dataclass`): `month: str`, `income: int`, `expense: int`, `balance: int`, `top: list[tuple[str, int]]`, `budget: int | None`, `usage_percent: float | None`, `has_data: bool`
 - 명령 처리 함수: `(args: argparse.Namespace) -> int`
 
 ## 4. 제약 (모든 단계에 적용)
 
 - Python 3.10에서 동작한다. 3.11 이후에만 있는 기능을 쓰지 않는다.
 - `pip install`이 필요한 라이브러리를 쓰지 않는다.
+- 모든 함수의 매개변수와 반환값에 타입 힌트를 적는다. E13의 확인은 별도 도구 없이 코드로 한다. 함수 시그니처와 이를 호출하는 코드를 나란히 읽어, 입출력 약속을 설명한다.
+- 실행 환경은 `uv venv --python 3.10`으로 만든 `.venv`이며, 활성화한 뒤 `python` 명령을 쓴다. 이 컴퓨터의 기본 환경에는 `python` 명령이 없다.
 - 스택트레이스를 출력하지 않고, 오류는 `[오류]`와 `[힌트]`로 출력하며, 오류 시 0이 아닌 코드로 종료한다.
 - 거래 파일 전체를 메모리에 모으지 않는다. `list`/`search`는 최신 N개, `summary`는 합계만 유지하고, `export`와 재작성은 한 줄씩 처리한다.
 - CSV는 UTF-8과 헤더를 쓰며, 컬럼은 `date,type,category,amount,memo,tags` 순서다.
@@ -138,26 +143,29 @@
 
 **전체 테스트 명령:** `python -m unittest discover -s tests -v`
 
+**명령 등록:** 각 단계는 그 단계에서 구현하는 명령만 등록한다. 구현 전 명령용 임시 코드는 만들지 않는다.
+
 **증거:** 사용자가 실행한 결과는 `사용자 보고`로, 에이전트가 실행한 결과는 에이전트 실행으로 구분한다.
 
 ### 기초
 
 **1단계. 패키지 뼈대** (E08)
-- 파일: `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `data/`, `__pycache__/`, `demo-data/`, `export.csv` 추가
-- 만드는 것: `build_parser() -> argparse.ArgumentParser`, `main(argv: list[str] | None = None) -> int`, `--data-dir`. 모든 하위 명령을 등록하고, 구현 전 명령은 안내 문구와 종료 코드 1로 끝낸다. 잘못된 옵션은 `[오류]`, `[힌트]`와 종료 코드 2로 처리
-- 테스트: 최상위와 모든 하위 명령의 `--help`가 종료 코드 0, 없는 옵션은 종료 코드 2이며 스택트레이스 없음
-- 직접 실행: `python -m budget_app --help`, `python -m budget_app list --help`
+- 준비: `uv venv --python 3.10`으로 가상환경을 만들고, `python --version`이 3.10인지 확인
+- 파일: `__init__.py`, `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `.venv/`, `data/`, `__pycache__/`, `demo-data/`, `export.csv` 추가
+- 만드는 것: `build_parser() -> argparse.ArgumentParser`, `main(argv: list[str] | None = None) -> int`, `--data-dir`. 잘못된 옵션은 `[오류]`, `[힌트]`와 종료 코드 2로 처리
+- 테스트: 최상위 `--help`가 종료 코드 0, 없는 옵션과 명령 없는 실행은 종료 코드 2이며 스택트레이스 없음
+- 직접 실행: `python -m budget_app --help`
 
 **2단계. 모델과 입력 검증** (E09, E13)
 - 파일: `models.py`, `errors.py`, `tests/test_models.py`
-- 만드는 것: `BudgetAppError`, `Transaction`, `parse_date`, `parse_month`, `parse_type`, `parse_amount`, `parse_tags`
+- 만드는 것: `BudgetAppError`, `dataclass`로 만든 `Transaction`, `parse_date`, `parse_month`, `parse_type`, `parse_amount`, `parse_tags`
 - 테스트: `2024-1-5`, `2024-02-30`, `2024-13`, 금액 `0`, `-1`, `1.5`, 타입 `gift`를 거부한다. 태그 `"a, b,,"`는 `["a", "b"]`가 된다. `from_dict`는 필드가 없거나 금액이 `true`이거나 id 형식이 잘못된 값을 거부한다.
 - 직접 실행: 없음. 테스트 결과를 함께 읽는다.
 
 **3단계. 거래 저장소** (E11, E14)
 - 파일: `repository.py`, `tests/test_repository.py`
 - 만드는 것: `read_jsonl`, `append_jsonl`, `TransactionRepository`의 `iter_all`, `append`, `next_id`
-- 테스트: 저장 후 다시 읽어 같은 거래가 나온다. 파일이 없으면 빈 결과다. `iter_all`은 제너레이터다. 다음 id는 `TX-000001`부터 증가한다. 특수 문자 메모가 유지된다. 문법이 깨진 줄과 필드가 잘못된 줄은 줄 번호가 담긴 `BudgetAppError`를 낸다.
+- 테스트: 저장 후 다시 읽어 같은 거래가 나온다. 빈 파일은 빈 결과다. `iter_all`은 제너레이터다. 다음 id는 `TX-000001`부터 증가하고, `next_id(1)`은 그다음 번호를 돌려준다. 특수 문자 메모가 유지된다. 문법이 깨진 줄과 필드가 잘못된 줄은 줄 번호가 담긴 `BudgetAppError`를 낸다.
 - 직접 실행: 없음. 테스트가 만든 JSONL의 모습을 함께 본다.
 
 **4단계. 예외 처리 데코레이터** (E06, E07, E12)
@@ -191,19 +199,19 @@
 **8단계. `search`** (E01, E11)
 - 파일: `services.py`, `cli.py`, `tests/test_services.py`, `tests/test_cli.py`
 - 만드는 것: `iter_matching`의 조건 검사, `search` 명령
-- 테스트: 조건별 검색과 복합 조건, 최신순 출력, 대소문자 구분 없는 `--q`, 정확히 일치하는 `--tag`, 시작일이 종료일보다 늦으면 오류. 기본 20개와 `--limit`이 동작하고, 결과가 개수만큼 차면 안내 문구가 나온다.
+- 테스트: 조건별 검색과 복합 조건, 최신순 출력, 대소문자 구분 없는 `--q`, 정확히 일치하는 `--tag`, 시작일이 종료일보다 늦으면 오류. `--from abc`, `--to 2024-02-30`, `--type gift`는 오류다. 기본 20개와 `--limit`이 동작하고, 결과가 개수만큼 차면 안내 문구가 나온다.
 - 직접 실행: 기간, 카테고리, 메모 키워드 검색 각 1회
 
 **9단계. 임시 파일 교체와 `delete`** (E01, E10)
 - 파일: `repository.py`, `services.py`, `cli.py`, `tests/test_repository.py`, `tests/test_services.py`
 - 만드는 것: `atomic_write`, `find`, `replace_all`, `delete_transaction`. 같은 폴더의 임시 파일에 쓰고 `flush`, `os.fsync` 후 `os.replace`로 교체한다. 실패하면 임시 파일을 지운다.
-- 테스트: 삭제 후 해당 거래만 사라진다. 없는 id는 종료 코드 1이고 파일이 바뀌지 않는다. 쓰기 도중 예외가 나면 원본이 그대로이고 임시 파일이 남지 않는다. 손상된 줄이 있으면 오류로 끝나고 파일이 바뀌지 않는다.
+- 테스트: 삭제 후 해당 거래만 사라지고 성공 메시지가 나온다. 없는 id는 종료 코드 1이고 파일이 바뀌지 않는다. 쓰기 도중 예외가 나면 원본이 그대로이고 임시 파일이 남지 않는다. 손상된 줄이 있으면 오류로 끝나고 파일이 바뀌지 않는다.
 - 직접 실행: 있는 id와 없는 id를 각각 삭제, `echo $?`
 
 **10단계. `update`** (E01, E10)
 - 파일: `services.py`, `cli.py`, `tests/test_services.py`, `tests/test_cli.py`
 - 만드는 것: `update_transaction(tx_id, changes) -> Transaction`. `replace_all`을 재사용한다.
-- 테스트: 지정한 필드만 바뀌고 id는 유지된다. 없는 id, 잘못된 값, 미등록 카테고리, 바꿀 필드 없음은 오류다. `--memo ""`는 메모를 비운다.
+- 테스트: 지정한 필드만 바뀌고 id는 유지되며 성공 메시지가 나온다. 없는 id, 잘못된 값, 미등록 카테고리, 바꿀 필드 없음은 오류다. `--memo ""`는 메모를 비운다.
 - 직접 실행: `update --id <id> --amount 20000` 후 `list`
 
 **11단계. `category remove`** (E03)
@@ -223,7 +231,7 @@
 **13단계. 예산** (E02, E04)
 - 파일: `repository.py`, `services.py`, `cli.py`, `tests/test_services.py`, `tests/test_cli.py`
 - 만드는 것: `BudgetStore`, `budget set`, `summary`의 사용률과 초과 경고. `atomic_write`로 저장한다.
-- 테스트: 재실행 후에도 유지된다. 같은 달은 덮어쓴다. 사용률을 소수 첫째 자리까지 출력한다. 정확히 100%는 경고가 없고 초과하면 경고한다. 예산이 없으면 예산 줄이 없다.
+- 테스트: 저장 성공 메시지가 나오고 재실행 후에도 유지된다. 같은 달은 덮어쓴다. 잘못된 `--month`와 `--amount 0`은 오류다. 사용률을 소수 첫째 자리까지 출력한다. 정확히 100%는 경고가 없고 초과하면 경고한다. 예산이 없으면 예산 줄이 없다.
 - 직접 실행: 예산 안쪽과 초과 상황 각 1회
 
 ### 파일 입출력
@@ -231,13 +239,13 @@
 **14단계. `export`** (E01, E05)
 - 파일: `repository.py`, `services.py`, `cli.py`, `tests/test_services.py`, `tests/test_cli.py`
 - 만드는 것: `write_csv`, `export_csv(out, filters) -> int`. `iter_matching`을 재사용한다.
-- 테스트: 헤더와 컬럼 순서가 스키마대로이고 UTF-8이다. 조건이 없거나 `--from`만 있으면 오류다. 월의 첫날과 마지막 날, 기간의 경계일이 포함된다. `--month`와 기간을 함께 주면 교집합만 나온다. 출력 파일이 이미 있으면 종료 코드 1이고 그 내용이 그대로다. `--out`에 거래 저장 파일을 지정해도 원본이 그대로다. 대상이 없으면 헤더만 쓰고 0건을 출력한다.
+- 테스트: 헤더와 컬럼 순서가 스키마대로이고 UTF-8이다. 처리 건수가 출력된다. 조건이 없거나 `--from`만 있으면 오류다. 잘못된 `--month`와 날짜는 오류이고 파일을 만들지 않는다. 월의 첫날과 마지막 날, 기간의 경계일이 포함된다. `--month`와 기간을 함께 주면 교집합만 나온다. 출력 파일이 이미 있으면 종료 코드 1이고 그 내용이 그대로다. `--out`에 거래 저장 파일을 지정해도 원본이 그대로다. 대상이 없으면 헤더만 쓰고 0건을 출력한다.
 - 직접 실행: `export --out export.csv --month <달>` 후 파일을 열어 확인
 
 **15단계. `import`** (E01, E05, E16)
 - 파일: `repository.py`, `services.py`, `cli.py`, `samples/`, `tests/test_repository.py`, `tests/test_services.py`
-- 만드는 것: `read_csv_rows`, `import_csv(path) -> int`. CSV를 한 번 읽으며 모든 행을 검증하고, 문제가 없을 때만 `replace_all`로 기존 거래와 새 거래를 저장한다. 파일은 `utf-8-sig`로 읽어 BOM을 처리한다.
-- 테스트: 정상 파일이 등록되고 새 id가 부여된다. 깨진 행이 하나라도 있으면 거래 파일이 바뀌지 않고, 모든 문제 행의 번호와 이유가 나오며, 종료 코드는 1이다. 저장 중 실패해도 거래 파일이 그대로다. 필수 컬럼 누락, `memo`와 `tags` 컬럼 없음, 열 개수가 다른 행, 없는 파일, BOM, 특수 문자 메모 왕복을 확인한다.
+- 만드는 것: `read_csv_rows`, `import_csv(path) -> int`. CSV를 한 번 읽으며 모든 행을 검증하고, 문제가 없을 때만 `replace_all`로 기존 거래와 새 거래를 저장한다. 새 거래의 id는 `next_id(offset)`으로 차례대로 부여한다. 파일은 `utf-8-sig`로 읽어 BOM을 처리하고, UTF-8이 아니면 "UTF-8로 저장하세요" 힌트와 함께 오류를 낸다. 이 단계 끝에서 모든 명령과 하위 명령(`category add/list/remove`, `budget set`)의 `--help`를 확인한다.
+- 테스트: 정상 파일이 등록되고 서로 다른 새 id가 부여되며 건수가 출력된다. 모든 명령의 `--help`가 종료 코드 0이다. CP949로 저장한 CSV는 종료 코드 1이고 거래 파일이 바뀌지 않으며 힌트가 나온다. 깨진 행이 하나라도 있으면 거래 파일이 바뀌지 않고, 모든 문제 행의 번호와 이유가 나오며, 종료 코드는 1이다. 저장 중 실패해도 거래 파일이 그대로다. 필수 컬럼 누락, `memo`와 `tags` 컬럼 없음, 열 개수가 다른 행, 없는 파일, BOM, 특수 문자 메모 왕복을 확인한다.
 - 직접 실행: `samples/`의 정상 파일과 깨진 파일을 각각 가져오고, 깨진 파일 뒤에 `list`로 변화가 없는지 확인
 
 ### 마무리
@@ -255,7 +263,7 @@
 **18단계. 전체 점검과 시연 순서표** (E01~E07)
 - 파일: `docs/demo.md`
 - 내용: `--data-dir ./demo-data`로 실제 데이터와 분리한 시연 순서. 평가 항목별 명령, 기대 결과, 실패 시 대처, 재실행을 위한 초기화 방법(`demo-data/`와 이전 `export.csv` 삭제)을 담는다.
-- 확인: Python 3.10에서 전체 테스트를 실행하고, 사용자가 순서표대로 시연을 직접 진행한다. 3.10 준비 방법은 코딩을 시작할 때 사용자에게 묻는다.
+- 확인: `.venv`의 Python 3.10에서 전체 테스트를 실행하고, 사용자가 순서표대로 시연을 직접 진행한다.
 
 **19단계. 검토와 수정** (전체)
 - 내용: Codex의 읽기 전용 검토와 `code-review`를 받고, 사용자와 함께 수정 여부를 정해 고친다.
