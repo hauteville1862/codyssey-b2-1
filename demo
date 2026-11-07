@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 -m budget_app --data-dir ./demo-data "$@"
