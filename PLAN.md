@@ -4,7 +4,7 @@
 
 **목표:** 미션 상세의 필수 기능을 모두 갖춘 콘솔 가계부 `budget_app`을 만들고, 사용자가 평가 항목 E01~E16마다 자신의 언어로 답변을 쓸 수 있는 상태로 넘긴다.
 
-**구조:** CLI → 서비스 → 저장소 → 모델 순서로 호출한다. 데이터는 JSONL 파일 세 개에 저장하고, 조회는 제너레이터 하나를 공유해 한 줄씩 읽는다.
+**구조:** `__main__` → `cli` → `services` → `repository` 방향으로 호출한다. `models`와 `errors`는 필요한 모듈이 직접 가져다 쓰며 위 계층을 가져오지 않는다. `decorators`는 `cli`에 적용하며 `cli`와 `services`를 가져오지 않는다. 데이터는 JSONL 파일 세 개에 저장하고, 조회는 제너레이터 하나를 공유해 한 줄씩 읽는다.
 
 **기술:** Python 3.10 이상, 표준 라이브러리만 사용, 테스트는 `unittest`.
 
@@ -51,7 +51,7 @@
 - 미등록 카테고리가 있는 import 행은 깨진 행으로 본다. 중복 검사는 하지 않는다.
 - 처리한 오류의 종료 코드는 1, 잘못된 옵션의 종료 코드는 2다.
 - `data/`는 `.gitignore`에 넣는다.
-- 커밋은 단계마다 여쭙고, 승인하면 `main`에 작게 쌓는다.
+- 커밋은 에이전트가 `main`에 작게 쌓고, 푸시는 사용자 승인을 받는다. 메시지 규칙은 `AGENTS.md`를 따른다.
 
 ### 기획서 검토에서 에이전트가 제안해 승인받음
 
@@ -89,11 +89,11 @@
 | `budget_app/__init__.py` | 패키지 표시. 내용 없음 |
 | `budget_app/__main__.py` | `python -m budget_app`의 진입점 |
 | `budget_app/cli.py` | 명령 정의, `input()`, 출력. 계산과 파일 입출력은 하지 않음 |
-| `budget_app/services.py` | 업무 규칙: 추가, 조회, 요약, 카테고리 삭제 규칙, import 검증 |
-| `budget_app/repository.py` | 파일을 다루는 코드 전부: JSONL, CSV, 임시 파일 교체 |
+| `budget_app/services.py` | 업무 규칙: 추가, 조회, 요약, 카테고리 삭제 규칙, import 검증. `SearchFilters`와 `MonthlySummary`를 정의 |
+| `budget_app/repository.py` | 거래, 카테고리, 예산의 JSONL 저장과 CSV 입출력, 임시 파일 교체 |
 | `budget_app/models.py` | `Transaction`과 입력값 검증 |
 | `budget_app/errors.py` | 원인과 힌트를 담는 오류 클래스 |
-| `budget_app/decorators.py` | 예외 처리와 실행 로그 데코레이터 |
+| `budget_app/decorators.py` | 예외 처리와 실행 로그 데코레이터. `app.log` 기록도 여기서 직접 한다 |
 | `tests/` | `test_models.py`, `test_repository.py`, `test_services.py`, `test_cli.py`. 모두 임시 폴더를 데이터 폴더로 사용 |
 | `samples/` | 시연용 CSV: 정상 파일과 깨진 행이 있는 파일 |
 | `docs/demo.md` | 시연 순서표 |
@@ -139,7 +139,9 @@
 
 ## 6. 단계별 절차
 
-**단계마다 반복:** 무엇을 왜 만드는지 설명 → 실패하는 테스트 작성과 실패 확인 → 구현 → 테스트 통과 확인 → 사용자가 직접 실행 → 커밋 여부 확인 → 다음 단계 시작 지시 대기.
+**단계마다 반복:** 무엇을 왜 만드는지 설명 → 실패하는 테스트 작성과 실패 확인 → 구현 → 테스트 통과 확인 → 사용자가 직접 실행 → 커밋 → 다음 단계 시작 지시 대기.
+
+**단계 시작 전 점검:** 각 단계를 시작하기 전에 `git status`와 GitHub `main`의 커밋을 확인해 사용자에게 알린다. 커밋하지 않은 변경이 있으면 커밋하고, 푸시하지 않은 커밋이 있으면 푸시 여부를 묻는다. 푸시는 사용자가 승인할 때만 한다.
 
 **전체 테스트 명령:** `python -m unittest discover -s tests -v`
 
@@ -147,11 +149,23 @@
 
 **증거:** 사용자가 실행한 결과는 `사용자 보고`로, 에이전트가 실행한 결과는 에이전트 실행으로 구분한다.
 
+### 구조 만들기
+
+**0단계. 빈 폴더와 파일 구조** (E08)
+- 만드는 것: 3절의 구조대로 내용 없는 폴더와 파일을 만든다. 테스트와 코드는 쓰지 않으므로 단계마다 반복하는 절차 중 설명, 사용자 확인, 커밋만 적용한다.
+  - `budget_app/`: `__init__.py`, `__main__.py`, `cli.py`, `services.py`, `repository.py`, `models.py`, `errors.py`, `decorators.py`
+  - `tests/`: `test_models.py`, `test_repository.py`, `test_services.py`, `test_cli.py`
+  - `samples/`: `import_ok.csv`, `import_broken.csv`
+  - `docs/`: `demo.md`
+- 만들지 않는 것: `data/`와 저장 파일. 프로그램이 실행될 때 만들며, 미리 만들면 첫 실행 동작을 확인할 수 없다. `README.md`는 이미 있어 그대로 둔다.
+- 확인: 파일 목록이 3절과 일치하고, 모든 새 파일의 크기가 0이다.
+- 직접 실행: `find budget_app tests samples docs -type f`
+
 ### 기초
 
 **1단계. 패키지 뼈대** (E08)
 - 준비: `uv venv --python 3.10`으로 가상환경을 만들고, `python --version`이 3.10인지 확인
-- 파일: `__init__.py`, `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `.venv/`, `data/`, `__pycache__/`, `demo-data/`, `export.csv` 추가
+- 파일: `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `.venv/`, `data/`, `__pycache__/`, `demo-data/`, `export.csv` 추가
 - 만드는 것: `build_parser() -> argparse.ArgumentParser`, `main(argv: list[str] | None = None) -> int`, `--data-dir`. 잘못된 옵션은 `[오류]`, `[힌트]`와 종료 코드 2로 처리
 - 테스트: 최상위 `--help`가 종료 코드 0, 없는 옵션과 명령 없는 실행은 종료 코드 2이며 스택트레이스 없음
 - 직접 실행: `python -m budget_app --help`
