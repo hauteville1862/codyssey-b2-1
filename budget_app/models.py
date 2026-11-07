@@ -68,6 +68,11 @@ class Transaction:
     memo: str = ""
     tags: list[str] = field(default_factory=list)
 
+    @property
+    def id_number(self) -> int:
+        """TX-000012에서 숫자 12를 꺼낸다."""
+        return int(self.id.removeprefix("TX-"))
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
