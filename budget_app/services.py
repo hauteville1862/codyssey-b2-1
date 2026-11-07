@@ -1,10 +1,17 @@
 import heapq
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Callable, Iterator
 
 from budget_app.errors import BudgetAppError
-from budget_app.models import Transaction, parse_date, parse_month, parse_type
+from budget_app.models import (
+    Transaction,
+    parse_amount,
+    parse_date,
+    parse_month,
+    parse_tags,
+    parse_type,
+)
 from budget_app.repository import CategoryStore, TransactionRepository
 
 DEFAULT_CATEGORIES = ("food", "transport", "rent", "etc", "salary")
@@ -113,6 +120,26 @@ class BudgetService:
         self.transactions.replace_all(
             tx for tx in self.transactions.iter_all() if tx.id != tx_id
         )
+
+    def update_transaction(self, tx_id: str, changes: dict[str, str]) -> Transaction:
+        if not changes:
+            raise BudgetAppError(
+                "바꿀 값이 없습니다.", "--amount처럼 바꿀 옵션을 하나 이상 입력하세요."
+            )
+        parsers: dict[str, Callable[[str], Any]] = {
+            "date": parse_date,
+            "type": parse_type,
+            "category": self.require_category,
+            "amount": parse_amount,
+            "memo": str,
+            "tags": parse_tags,
+        }
+        parsed = {name: parsers[name](value) for name, value in changes.items()}
+        updated = replace(self.require_transaction(tx_id), **parsed)
+        self.transactions.replace_all(
+            updated if tx.id == tx_id else tx for tx in self.transactions.iter_all()
+        )
+        return updated
 
     def iter_matching(self, filters: SearchFilters) -> Iterator[Transaction]:
         """조건에 맞는 거래를 한 건씩 돌려주는 제너레이터."""

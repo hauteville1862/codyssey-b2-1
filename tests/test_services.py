@@ -118,6 +118,70 @@ class DeleteTransactionTest(QueryTestCase):
         self.assertEqual(path.read_bytes(), before)
 
 
+class UpdateTransactionTest(QueryTestCase):
+    def test_update_changes_only_given_fields_and_keeps_id(self) -> None:
+        tx_id = self.add("2024-01-01", memo="점심", tags=["meal"])
+        other = self.add("2024-01-02")
+
+        updated = self.service.update_transaction(tx_id, {"amount": "20000"})
+
+        self.assertEqual(updated.id, tx_id)
+        self.assertEqual(updated.amount, 20000)
+        self.assertEqual(updated.memo, "점심")
+        self.assertEqual(updated.tags, ["meal"])
+        stored = {tx.id: tx for tx in self.service.transactions.iter_all()}
+        self.assertEqual(stored[tx_id].amount, 20000)
+        self.assertEqual(stored[other].amount, 1000)
+
+    def test_update_can_change_every_field(self) -> None:
+        tx_id = self.add("2024-01-01")
+
+        updated = self.service.update_transaction(
+            tx_id,
+            {
+                "date": "2024-02-02",
+                "type": "income",
+                "category": "salary",
+                "amount": "5",
+                "memo": "보너스",
+                "tags": "a, b",
+            },
+        )
+
+        self.assertEqual(updated.date, "2024-02-02")
+        self.assertEqual(updated.type, "income")
+        self.assertEqual(updated.category, "salary")
+        self.assertEqual(updated.amount, 5)
+        self.assertEqual(updated.memo, "보너스")
+        self.assertEqual(updated.tags, ["a", "b"])
+
+    def test_empty_memo_and_tags_clear_the_values(self) -> None:
+        tx_id = self.add("2024-01-01", memo="점심", tags=["meal"])
+
+        updated = self.service.update_transaction(tx_id, {"memo": "", "tags": ""})
+
+        self.assertEqual(updated.memo, "")
+        self.assertEqual(updated.tags, [])
+
+    def test_invalid_updates_are_rejected_and_file_stays_the_same(self) -> None:
+        tx_id = self.add("2024-01-01")
+        path = self.data_dir / "transactions.jsonl"
+        before = path.read_bytes()
+        wrong: list[tuple[str, dict[str, str]]] = [
+            ("TX-999999", {"amount": "5"}),
+            (tx_id, {}),
+            (tx_id, {"date": "2024-02-30"}),
+            (tx_id, {"type": "gift"}),
+            (tx_id, {"amount": "0"}),
+            (tx_id, {"category": "nope"}),
+        ]
+        for target, changes in wrong:
+            with self.subTest(target=target, changes=changes):
+                with self.assertRaises(BudgetAppError):
+                    self.service.update_transaction(target, changes)
+                self.assertEqual(path.read_bytes(), before)
+
+
 class SearchConditionTest(QueryTestCase):
     def setUp(self) -> None:
         super().setUp()

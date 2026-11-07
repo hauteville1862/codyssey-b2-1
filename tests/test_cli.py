@@ -269,6 +269,37 @@ class DeleteCommandTest(AppTestCase):
         self.assertIn("[힌트]", result.stderr)
 
 
+class UpdateCommandTest(AppTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.run_in_data_dir("add", stdin="2024-01-01\nexpense\nfood\n1000\n점심\nmeal\n")
+
+    def test_update_prints_success_and_changes_only_given_option(self) -> None:
+        result = self.run_in_data_dir("update", "--id", "TX-000001", "--amount", "20000")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[수정 완료] id=TX-000001", result.stdout)
+        listed = self.run_in_data_dir("list").stdout
+        self.assertIn("TX-000001 | 2024-01-01 | expense | food | 20000 | 점심", listed)
+
+    def test_empty_memo_option_clears_memo(self) -> None:
+        self.run_in_data_dir("update", "--id", "TX-000001", "--memo", "")
+
+        self.assertNotIn("점심", self.run_in_data_dir("list").stdout)
+
+    def test_no_change_option_exits_with_error(self) -> None:
+        result = self.run_in_data_dir("update", "--id", "TX-000001")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[힌트]", result.stderr)
+
+    def test_unknown_id_exits_with_error(self) -> None:
+        result = self.run_in_data_dir("update", "--id", "TX-999999", "--amount", "5")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("없는 데이터", result.stderr)
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

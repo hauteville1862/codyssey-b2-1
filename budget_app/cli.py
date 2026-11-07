@@ -95,6 +95,17 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+def cmd_update(args: argparse.Namespace) -> int:
+    fields = ("date", "type", "category", "amount", "memo", "tags")
+    changes = {
+        name: getattr(args, name) for name in fields if getattr(args, name) is not None
+    }
+    BudgetService(args.data_dir).update_transaction(args.id, changes)
+    print(f"[수정 완료] id={args.id}")
+    return 0
+
+
+@handle_errors
 def cmd_category_list(args: argparse.Namespace) -> int:
     for name in BudgetService(args.data_dir).categories.list_all():
         print(f"- {name}")
@@ -150,6 +161,16 @@ def build_parser() -> argparse.ArgumentParser:
     delete = commands.add_parser("delete", help="거래 삭제")
     delete.add_argument("--id", required=True, help="거래 id")
     delete.set_defaults(handler=cmd_delete)
+
+    update = commands.add_parser("update", help="거래 수정 (옵션 방식)")
+    update.add_argument("--id", required=True, help="거래 id")
+    update.add_argument("--date", help="날짜 YYYY-MM-DD")
+    update.add_argument("--type", help="income 또는 expense")
+    update.add_argument("--category", help="카테고리")
+    update.add_argument("--amount", help="금액 (양의 정수)")
+    update.add_argument("--memo", help='메모 ("" 를 주면 비움)')
+    update.add_argument("--tags", help='쉼표로 구분한 태그 ("" 를 주면 비움)')
+    update.set_defaults(handler=cmd_update)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")
