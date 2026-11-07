@@ -68,6 +68,7 @@
 - `update`에 바꿀 필드가 하나도 없으면 오류를 낸다. `--memo ""`와 `--tags ""`는 값을 비운다.
 - 옵션으로 받은 날짜, 달, 타입, 금액도 `parse_*` 함수로 검증한다. 명령 처리 함수 안에서 검증해 오류를 `handle_errors`가 처리하게 한다.
 - 성공 메시지와 건수 출력은 미션 상세 8절 예시의 형식을 따른다. 예: `[저장 완료] id=TX-000012`, `[완료] imported=5, skipped=0`
+- `list`와 `search`의 출력은 미션 상세 8절 예시의 6개 열 뒤에 태그 열을 더한다. `--tag` 검색 결과를 화면에서 확인하기 위한 에이전트 판단이며, 사용자가 별도로 승인하지는 않았다.
 
 **export와 import**
 - `export`의 `--from`과 `--to`는 둘 다 있어야 한다. `--month`와 함께 주면 모든 조건을 만족하는 거래만 내보낸다.
@@ -109,7 +110,7 @@
 - `append_jsonl(path: Path, record: dict) -> None`
 - `atomic_write(path: Path, lines: Iterable[str]) -> None`
 - `read_csv_rows(path: Path) -> Iterator[tuple[int, dict]]`, `write_csv(path: Path, txs: Iterable[Transaction]) -> int`
-- `TransactionRepository`: `iter_all() -> Iterator[Transaction]`, `append(tx) -> None`, `next_id(offset: int = 0) -> str`, `find(tx_id) -> Transaction | None`, `replace_all(txs: Iterable[Transaction]) -> None`
+- `TransactionRepository`: `iter_all() -> Iterator[Transaction]`, `append(tx) -> None`, `next_id() -> str`, `next_ids(count: int) -> list[str]`, `find(tx_id) -> Transaction | None`, `replace_all(txs: Iterable[Transaction]) -> None`
 - `CategoryStore`: `list_all() -> list[str]`, `add(name) -> None`, `remove(name) -> None`
 - `BudgetStore`: `get(month) -> int | None`, `set(month, amount) -> None`
 - `SearchFilters`(`dataclass`): `month`, `date_from`, `date_to`, `category`, `type`, `q`, `tag`(모두 `str | None`, 기본값 `None`)
@@ -141,7 +142,7 @@
 
 **단계마다 반복:** 무엇을 왜 만드는지 설명 → 실패하는 테스트 작성과 실패 확인 → 구현 → 테스트 통과 확인 → 에이전트가 `직접 실행` 명령을 실행해 결과 공유 → 커밋 → 다음 단계. 사용자 지시에 따라 단계 사이에 묻지 않고 이어 가며, 푸시와 사용자 터미널 실행이 필요한 지점에서 멈춘다. 사용자의 터미널에서 실행하는 것은 18단계에서 확인한다.
 
-**단계 시작 전 점검:** 각 단계를 시작하기 전에 `git status`와 GitHub `main`의 커밋을 확인해 사용자에게 알린다. 커밋하지 않은 변경이 있으면 커밋하고, 푸시하지 않은 커밋이 있으면 푸시 여부를 묻는다. 푸시는 사용자가 승인할 때만 한다.
+**단계 시작 전 점검:** 각 단계를 시작하기 전에 `git status`와 GitHub `main`의 커밋을 확인해 사용자에게 알린다. 커밋하지 않은 변경이 있으면 커밋한다. 연속 진행 중에는 푸시 여부를 단계마다 묻지 않고, 멈추는 지점에서 한꺼번에 묻는다. 푸시는 사용자가 승인할 때만 한다.
 
 **전체 테스트 명령:** `python3 -m unittest discover -s tests -v`
 
@@ -179,7 +180,7 @@
 **3단계. 거래 저장소** (E11, E14)
 - 파일: `repository.py`, `tests/test_repository.py`
 - 만드는 것: `read_jsonl`, `append_jsonl`, `TransactionRepository`의 `iter_all`, `append`, `next_id`
-- 테스트: 저장 후 다시 읽어 같은 거래가 나온다. 빈 파일은 빈 결과다. `iter_all`은 제너레이터다. 다음 id는 `TX-000001`부터 증가하고, `next_id(1)`은 그다음 번호를 돌려준다. 특수 문자 메모가 유지된다. 문법이 깨진 줄과 필드가 잘못된 줄은 줄 번호가 담긴 `BudgetAppError`를 낸다.
+- 테스트: 저장 후 다시 읽어 같은 거래가 나온다. 빈 파일은 빈 결과다. `iter_all`은 제너레이터다. 다음 id는 `TX-000001`부터 증가하고, `next_ids(2)`는 연속된 번호 두 개를 돌려준다. 특수 문자 메모가 유지된다. 문법이 깨진 줄과 필드가 잘못된 줄은 줄 번호가 담긴 `BudgetAppError`를 낸다.
 - 직접 실행: 없음. 테스트가 만든 JSONL의 모습을 함께 본다.
 
 **4단계. 예외 처리 데코레이터** (E06, E07, E12)
@@ -258,7 +259,7 @@
 
 **15단계. `import`** (E01, E05, E16)
 - 파일: `repository.py`, `services.py`, `cli.py`, `samples/`, `tests/test_repository.py`, `tests/test_services.py`
-- 만드는 것: `read_csv_rows`, `import_csv(path) -> int`. CSV를 한 번 읽으며 모든 행을 검증하고, 문제가 없을 때만 `replace_all`로 기존 거래와 새 거래를 저장한다. 새 거래의 id는 `next_id(offset)`으로 차례대로 부여한다. 파일은 `utf-8-sig`로 읽어 BOM을 처리하고, UTF-8이 아니면 "UTF-8로 저장하세요" 힌트와 함께 오류를 낸다. 이 단계 끝에서 모든 명령과 하위 명령(`category add/list/remove`, `budget set`)의 `--help`를 확인한다.
+- 만드는 것: `read_csv_rows`, `import_csv(path) -> int`. CSV를 한 번 읽으며 모든 행을 검증하고, 문제가 없을 때만 `replace_all`로 기존 거래와 새 거래를 저장한다. 새 거래의 id는 `next_ids(count)`로 한 번에 받아 부여한다. 파일을 행마다 다시 읽지 않기 위해 사용자가 승인한 설계다. 파일은 `utf-8-sig`로 읽어 BOM을 처리하고, UTF-8이 아니면 "UTF-8로 저장하세요" 힌트와 함께 오류를 낸다. 이 단계 끝에서 모든 명령과 하위 명령(`category add/list/remove`, `budget set`)의 `--help`를 확인한다.
 - 테스트: 정상 파일이 등록되고 서로 다른 새 id가 부여되며 건수가 출력된다. 모든 명령의 `--help`가 종료 코드 0이다. CP949로 저장한 CSV는 종료 코드 1이고 거래 파일이 바뀌지 않으며 힌트가 나온다. 깨진 행이 하나라도 있으면 거래 파일이 바뀌지 않고, 모든 문제 행의 번호와 이유가 나오며, 종료 코드는 1이다. 저장 중 실패해도 거래 파일이 그대로다. 필수 컬럼 누락, `memo`와 `tags` 컬럼 없음, 열 개수가 다른 행, 없는 파일, BOM, 특수 문자 메모 왕복을 확인한다.
 - 직접 실행: `samples/`의 정상 파일과 깨진 파일을 각각 가져오고, 깨진 파일 뒤에 `list`로 변화가 없는지 확인
 
