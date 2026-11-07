@@ -4,4 +4,4 @@ reference-repos/
 data/
 __pycache__/
 demo-data/
-export.csv
+export*.csv

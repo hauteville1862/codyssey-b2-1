@@ -166,7 +166,7 @@
 
 **1단계. 패키지 뼈대** (E08)
 - 준비: `python3 --version`이 3.10 이상인지 확인
-- 파일: `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `data/`, `__pycache__/`, `demo-data/`, `export.csv` 추가
+- 파일: `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `data/`, `__pycache__/`, `demo-data/`, `export*.csv` 추가
 - 만드는 것: `build_parser() -> argparse.ArgumentParser`, `main(argv: list[str] | None = None) -> int`, `--data-dir`. 잘못된 옵션은 `[오류]`, `[힌트]`와 종료 코드 2로 처리
 - 테스트: 최상위 `--help`가 종료 코드 0, 없는 옵션과 명령 없는 실행은 종료 코드 2이며 스택트레이스 없음
 - 직접 실행: `python3 -m budget_app --help`
