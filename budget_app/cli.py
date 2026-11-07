@@ -12,7 +12,7 @@ from budget_app.models import (
     parse_tags,
     parse_type,
 )
-from budget_app.services import BudgetService, SearchFilters
+from budget_app.services import BudgetService, MonthlySummary, SearchFilters
 
 PROG = "python3 -m budget_app"
 
@@ -110,13 +110,30 @@ def cmd_summary(args: argparse.Namespace) -> int:
     summary = BudgetService(args.data_dir).monthly_summary(args.month, args.top)
     if not summary.has_data:
         print("데이터 없음")
+        print_budget(summary)
         return 0
     print(f"총 수입: {summary.income}원")
     print(f"총 지출: {summary.expense}원")
     print(f"잔액: {summary.balance}원")
+    print_budget(summary)
     print(f"지출 TOP {args.top}")
     for rank, (category, amount) in enumerate(summary.top, start=1):
         print(f"{rank}) {category} {amount}원")
+    return 0
+
+
+def print_budget(summary: MonthlySummary) -> None:
+    if summary.budget is None:
+        return
+    print(f"예산: {summary.budget}원 (사용률 {summary.usage_percent:.1f}%)")
+    if summary.expense > summary.budget:
+        print(f"[경고] 예산을 {summary.expense - summary.budget}원 초과했습니다.")
+
+
+@handle_errors
+def cmd_budget_set(args: argparse.Namespace) -> int:
+    amount = BudgetService(args.data_dir).set_budget(args.month, args.amount)
+    print(f"[저장 완료] {args.month} 예산 {amount}원")
     return 0
 
 
@@ -201,6 +218,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--top", type=positive_int, default=5, help="지출 상위 개수 (기본값: 5)"
     )
     summary.set_defaults(handler=cmd_summary)
+
+    budget = commands.add_parser("budget", help="예산 관리")
+    budget_actions = budget.add_subparsers(
+        dest="action", required=True, metavar="<action>"
+    )
+    budget_set = budget_actions.add_parser("set", help="월 예산 저장")
+    budget_set.add_argument("--month", required=True, help="월 YYYY-MM")
+    budget_set.add_argument("--amount", required=True, help="금액 (양의 정수)")
+    budget_set.set_defaults(handler=cmd_budget_set)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")

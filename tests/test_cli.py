@@ -356,6 +356,64 @@ class SummaryCommandTest(AppTestCase):
         self.assertEqual(self.run_in_data_dir("summary").returncode, 2)
 
 
+class BudgetCommandTest(AppTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.run_in_data_dir("add", stdin="2024-01-05\nexpense\nfood\n1000\n\n\n")
+
+    def set_budget(self, amount: str) -> subprocess.CompletedProcess[str]:
+        return self.run_in_data_dir(
+            "budget", "set", "--month", "2024-01", "--amount", amount
+        )
+
+    def summary(self) -> str:
+        return self.run_in_data_dir("summary", "--month", "2024-01").stdout
+
+    def test_budget_set_prints_success(self) -> None:
+        result = self.set_budget("5000")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[저장 완료] 2024-01 예산 5000원", result.stdout)
+
+    def test_summary_prints_usage_without_warning_inside_budget(self) -> None:
+        self.set_budget("5000")
+
+        output = self.summary()
+
+        self.assertIn("예산: 5000원 (사용률 20.0%)", output)
+        self.assertNotIn("[경고]", output)
+
+    def test_exactly_full_budget_has_no_warning(self) -> None:
+        self.set_budget("1000")
+
+        output = self.summary()
+
+        self.assertIn("사용률 100.0%", output)
+        self.assertNotIn("[경고]", output)
+
+    def test_over_budget_prints_warning(self) -> None:
+        self.set_budget("999")
+
+        self.assertIn("[경고] 예산을 1원 초과했습니다.", self.summary())
+
+    def test_no_budget_prints_no_budget_line(self) -> None:
+        self.assertNotIn("예산", self.summary())
+
+    def test_budget_is_shown_for_month_without_transactions(self) -> None:
+        self.run_in_data_dir("budget", "set", "--month", "2024-02", "--amount", "100")
+
+        output = self.run_in_data_dir("summary", "--month", "2024-02").stdout
+
+        self.assertIn("데이터 없음", output)
+        self.assertIn("예산: 100원 (사용률 0.0%)", output)
+
+    def test_invalid_amount_exits_with_error_and_hint(self) -> None:
+        result = self.set_budget("0")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[힌트]", result.stderr)
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

@@ -254,6 +254,57 @@ class MonthlySummaryTest(QueryTestCase):
             self.service.monthly_summary("2024-13", top=5)
 
 
+class BudgetTest(QueryTestCase):
+    def test_budget_survives_restart_and_overwrites_same_month(self) -> None:
+        self.service.set_budget("2024-01", "500000")
+        self.service.set_budget("2024-02", "100")
+        self.service.set_budget("2024-01", "700000")
+
+        reopened = BudgetService(self.data_dir)
+
+        self.assertEqual(reopened.budgets.get("2024-01"), 700000)
+        self.assertEqual(reopened.budgets.get("2024-02"), 100)
+        self.assertIsNone(reopened.budgets.get("2024-03"))
+
+    def test_invalid_budget_values_are_rejected(self) -> None:
+        for month, amount in [("2024-13", "100"), ("2024-01", "0"), ("2024-01", "x")]:
+            with self.subTest(month=month, amount=amount):
+                with self.assertRaises(BudgetAppError):
+                    self.service.set_budget(month, amount)
+
+    def test_summary_includes_budget_and_usage_percent(self) -> None:
+        self.add("2024-01-05", amount=215000)
+        self.service.set_budget("2024-01", "500000")
+
+        summary = self.service.monthly_summary("2024-01", top=5)
+
+        self.assertEqual(summary.budget, 500000)
+        self.assertEqual(summary.usage_percent, 43.0)
+
+    def test_summary_without_budget_has_no_usage(self) -> None:
+        self.add("2024-01-05")
+
+        summary = self.service.monthly_summary("2024-01", top=5)
+
+        self.assertIsNone(summary.budget)
+        self.assertIsNone(summary.usage_percent)
+
+    def test_month_without_transactions_has_zero_usage(self) -> None:
+        self.service.set_budget("2024-01", "500000")
+
+        self.assertEqual(self.service.monthly_summary("2024-01", 5).usage_percent, 0.0)
+
+    def test_damaged_budget_line_reports_line_number(self) -> None:
+        (self.data_dir / "budgets.jsonl").write_text(
+            '{"month": "2024-13", "amount": 1}\n', encoding="utf-8"
+        )
+
+        with self.assertRaises(BudgetAppError) as caught:
+            self.service.budgets.get("2024-01")
+
+        self.assertIn("1번째 줄", caught.exception.message)
+
+
 class SearchConditionTest(QueryTestCase):
     def setUp(self) -> None:
         super().setUp()

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from budget_app.errors import BudgetAppError
-from budget_app.models import Transaction
+from budget_app.models import Transaction, parse_amount, parse_month
 
 
 def _damaged_line(path: Path, line_number: int) -> BudgetAppError:
@@ -72,6 +72,35 @@ class CategoryStore:
     def remove(self, name: str) -> None:
         kept = [other for other in self.list_all() if other != name]
         atomic_write(self.path, (_to_line({"name": other}) for other in kept))
+
+
+class BudgetStore:
+    """월별 예산 파일을 읽고 쓴다."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def _read_all(self) -> dict[str, int]:
+        budgets = {}
+        for line_number, record in read_jsonl(self.path):
+            month, amount = record.get("month"), record.get("amount")
+            try:
+                if type(amount) is not int:
+                    raise _damaged_line(self.path, line_number)
+                budgets[parse_month(month)] = parse_amount(str(amount))
+            except (BudgetAppError, TypeError) as error:
+                raise _damaged_line(self.path, line_number) from error
+        return budgets
+
+    def get(self, month: str) -> int | None:
+        return self._read_all().get(month)
+
+    def set(self, month: str, amount: int) -> None:
+        budgets = {**self._read_all(), month: amount}
+        lines = (
+            _to_line({"month": name, "amount": value}) for name, value in budgets.items()
+        )
+        atomic_write(self.path, lines)
 
 
 class TransactionRepository:

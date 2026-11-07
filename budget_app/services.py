@@ -12,7 +12,7 @@ from budget_app.models import (
     parse_tags,
     parse_type,
 )
-from budget_app.repository import CategoryStore, TransactionRepository
+from budget_app.repository import BudgetStore, CategoryStore, TransactionRepository
 
 DEFAULT_CATEGORIES = ("food", "transport", "rent", "etc", "salary")
 
@@ -78,6 +78,7 @@ class BudgetService:
             (data_dir / name).touch()
         self.transactions = TransactionRepository(data_dir / "transactions.jsonl")
         self.categories = CategoryStore(data_dir / "categories.jsonl")
+        self.budgets = BudgetStore(data_dir / "budgets.jsonl")
         if not self.categories.list_all():
             for name in DEFAULT_CATEGORIES:
                 self.categories.add(name)
@@ -187,9 +188,23 @@ class BudgetService:
                     spent.get(transaction.category, 0) + transaction.amount
                 )
         ranked = sorted(spent.items(), key=lambda item: (-item[1], item[0]))
+        budget = self.budgets.get(month)
+        usage_percent = None if budget is None else round(expense / budget * 100, 1)
         return MonthlySummary(
-            month, income, expense, income - expense, ranked[:top], has_data
+            month,
+            income,
+            expense,
+            income - expense,
+            ranked[:top],
+            has_data,
+            budget,
+            usage_percent,
         )
+
+    def set_budget(self, month: str, amount: str) -> int:
+        parsed_amount = parse_amount(amount)
+        self.budgets.set(parse_month(month), parsed_amount)
+        return parsed_amount
 
     def search(self, filters: SearchFilters, limit: int = 20) -> list[Transaction]:
         """파일을 끝까지 읽되, 메모리에는 최신 거래 limit건만 유지한다."""
