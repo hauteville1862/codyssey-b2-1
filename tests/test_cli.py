@@ -182,6 +182,75 @@ class ListCommandTest(AppTestCase):
         self.assertIn("거래 내역이 없습니다", result.stdout)
 
 
+class SearchCommandTest(AppTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        for day in range(1, 22):
+            memo = "점심" if day == 21 else "간식"
+            self.run_in_data_dir(
+                "add", stdin=f"2024-01-{day:02d}\nexpense\nfood\n1000\n{memo}\nmeal\n"
+            )
+
+    def test_options_filter_and_print_newest_first(self) -> None:
+        result = self.run_in_data_dir(
+            "search",
+            "--from", "2024-01-20",
+            "--to", "2024-01-21",
+            "--category", "food",
+            "--type", "expense",
+            "--tag", "meal",
+        )  # fmt: skip
+
+        self.assertEqual(result.returncode, 0)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertIn("2024-01-21", lines[0])
+        self.assertIn("2024-01-20", lines[1])
+
+    def test_q_option_searches_memo(self) -> None:
+        result = self.run_in_data_dir("search", "--q", "점심")
+
+        self.assertEqual(len(result.stdout.splitlines()), 1)
+
+    def test_full_result_page_prints_limit_notice(self) -> None:
+        result = self.run_in_data_dir("search")
+
+        self.assertEqual(len(result.stdout.splitlines()), 21)
+        self.assertIn("최대 20건 표시. 더 보려면 --limit", result.stdout)
+
+    def test_limit_option_changes_count_and_notice(self) -> None:
+        result = self.run_in_data_dir("search", "--limit", "2")
+
+        self.assertEqual(len(result.stdout.splitlines()), 3)
+        self.assertIn("최대 2건 표시", result.stdout)
+
+    def test_result_smaller_than_limit_has_no_notice(self) -> None:
+        result = self.run_in_data_dir("search", "--q", "점심")
+
+        self.assertNotIn("최대", result.stdout)
+
+    def test_no_match_prints_notice(self) -> None:
+        result = self.run_in_data_dir("search", "--category", "rent")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("조건에 맞는 거래가 없습니다", result.stdout)
+
+    def test_invalid_values_exit_with_error_and_hint(self) -> None:
+        wrong = [
+            ["--from", "abc"],
+            ["--to", "2024-02-30"],
+            ["--type", "gift"],
+            ["--from", "2024-02-01", "--to", "2024-01-01"],
+        ]
+        for options in wrong:
+            with self.subTest(options=options):
+                result = self.run_in_data_dir("search", *options)
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("[오류]", result.stderr)
+                self.assertIn("[힌트]", result.stderr)
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

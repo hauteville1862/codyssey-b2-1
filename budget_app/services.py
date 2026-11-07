@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterator
 
 from budget_app.errors import BudgetAppError
-from budget_app.models import Transaction
+from budget_app.models import Transaction, parse_date, parse_month, parse_type
 from budget_app.repository import CategoryStore, TransactionRepository
 
 DEFAULT_CATEGORIES = ("food", "transport", "rent", "etc", "salary")
@@ -21,6 +21,31 @@ class SearchFilters:
     type: str | None = None
     q: str | None = None
     tag: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.month is not None:
+            parse_month(self.month)
+        if self.date_from is not None:
+            parse_date(self.date_from)
+        if self.date_to is not None:
+            parse_date(self.date_to)
+        if self.type is not None:
+            parse_type(self.type)
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise BudgetAppError(
+                "시작일이 종료일보다 늦습니다.", "--from을 --to보다 빠르게 입력하세요."
+            )
+
+    def matches(self, tx: Transaction) -> bool:
+        return (
+            (self.month is None or tx.date.startswith(f"{self.month}-"))
+            and (self.date_from is None or tx.date >= self.date_from)
+            and (self.date_to is None or tx.date <= self.date_to)
+            and (self.category is None or tx.category == self.category)
+            and (self.type is None or tx.type == self.type)
+            and (self.q is None or self.q.lower() in tx.memo.lower())
+            and (self.tag is None or self.tag in tx.tags)
+        )
 
 
 class BudgetService:
@@ -77,7 +102,9 @@ class BudgetService:
 
     def iter_matching(self, filters: SearchFilters) -> Iterator[Transaction]:
         """조건에 맞는 거래를 한 건씩 돌려주는 제너레이터."""
-        return self.transactions.iter_all()
+        for transaction in self.transactions.iter_all():
+            if filters.matches(transaction):
+                yield transaction
 
     def search(self, filters: SearchFilters, limit: int = 20) -> list[Transaction]:
         """파일을 끝까지 읽되, 메모리에는 최신 거래 limit건만 유지한다."""

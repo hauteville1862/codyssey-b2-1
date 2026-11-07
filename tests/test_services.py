@@ -81,6 +81,53 @@ class QueryTestCase(ServiceTestCase):
         return transaction.id
 
 
+class SearchConditionTest(QueryTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.lunch = self.add("2024-01-10", memo="회사 Lunch", tags=["meal"])
+        self.bus = self.add("2024-01-31", category="transport", tags=["mealtime"])
+        self.pay = self.add("2024-02-01", tx_type="income", category="salary")
+
+    def found_ids(self, **conditions: str) -> list[str]:
+        result = self.service.search(SearchFilters(**conditions))
+        return [tx.id for tx in result]
+
+    def test_period_includes_both_boundary_dates(self) -> None:
+        self.assertEqual(
+            self.found_ids(date_from="2024-01-10", date_to="2024-01-31"),
+            [self.bus, self.lunch],
+        )
+
+    def test_month_selects_only_that_month(self) -> None:
+        self.assertEqual(self.found_ids(month="2024-02"), [self.pay])
+
+    def test_category_and_type_select_exact_values(self) -> None:
+        self.assertEqual(self.found_ids(category="transport"), [self.bus])
+        self.assertEqual(self.found_ids(type="income"), [self.pay])
+
+    def test_q_matches_part_of_memo_ignoring_case(self) -> None:
+        self.assertEqual(self.found_ids(q="lunch"), [self.lunch])
+
+    def test_tag_must_match_whole_tag(self) -> None:
+        self.assertEqual(self.found_ids(tag="meal"), [self.lunch])
+
+    def test_conditions_are_combined_with_and(self) -> None:
+        self.assertEqual(self.found_ids(category="food", type="income"), [])
+
+    def test_invalid_condition_values_are_rejected(self) -> None:
+        wrong: list[dict[str, str]] = [
+            {"date_from": "abc"},
+            {"date_to": "2024-02-30"},
+            {"month": "2024-13"},
+            {"type": "gift"},
+            {"date_from": "2024-02-01", "date_to": "2024-01-01"},
+        ]
+        for conditions in wrong:
+            with self.subTest(conditions=conditions):
+                with self.assertRaises(BudgetAppError):
+                    SearchFilters(**conditions)
+
+
 class SearchNewestFirstTest(QueryTestCase):
     def test_older_date_added_later_is_ordered_by_date(self) -> None:
         march = self.add("2024-03-01")

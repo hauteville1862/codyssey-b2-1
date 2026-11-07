@@ -68,6 +68,26 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+def cmd_search(args: argparse.Namespace) -> int:
+    filters = SearchFilters(
+        date_from=args.date_from,
+        date_to=args.date_to,
+        category=args.category,
+        type=args.type,
+        q=args.q,
+        tag=args.tag,
+    )
+    transactions = BudgetService(args.data_dir).search(filters, args.limit)
+    if not transactions:
+        print("조건에 맞는 거래가 없습니다.")
+    for transaction in transactions:
+        print(format_transaction(transaction))
+    if len(transactions) == args.limit:
+        print(f"최대 {args.limit}건 표시. 더 보려면 --limit")
+    return 0
+
+
+@handle_errors
 def cmd_category_list(args: argparse.Namespace) -> int:
     for name in BudgetService(args.data_dir).categories.list_all():
         print(f"- {name}")
@@ -107,6 +127,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=positive_int, default=20, help="출력 개수 (기본값: 20)"
     )
     list_parser.set_defaults(handler=cmd_list)
+
+    search = commands.add_parser("search", help="거래 검색 (최신순)")
+    search.add_argument("--from", dest="date_from", help="시작일 YYYY-MM-DD")
+    search.add_argument("--to", dest="date_to", help="종료일 YYYY-MM-DD")
+    search.add_argument("--category", help="카테고리")
+    search.add_argument("--type", help="income 또는 expense")
+    search.add_argument("--q", help="메모 키워드")
+    search.add_argument("--tag", help="태그")
+    search.add_argument(
+        "--limit", type=positive_int, default=20, help="출력 개수 (기본값: 20)"
+    )
+    search.set_defaults(handler=cmd_search)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")
