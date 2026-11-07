@@ -8,6 +8,7 @@ from budget_app.errors import BudgetAppError
 from budget_app.models import Transaction, parse_amount, parse_month
 
 CSV_COLUMNS = ("date", "type", "category", "amount", "memo", "tags")
+CSV_REQUIRED_COLUMNS = ("date", "type", "category", "amount")
 
 
 def _damaged_line(path: Path, line_number: int) -> BudgetAppError:
@@ -52,6 +53,26 @@ def atomic_write(path: Path, lines: Iterable[str]) -> None:
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
+
+
+def read_csv_rows(path: Path) -> Iterator[tuple[int, dict[Any, Any]]]:
+    """CSV를 한 행씩 돌려준다. utf-8-sig라 엑셀의 BOM도 처리된다."""
+    try:
+        with path.open(encoding="utf-8-sig", newline="") as file:
+            reader = csv.DictReader(file)
+            columns = reader.fieldnames or []
+            missing = [name for name in CSV_REQUIRED_COLUMNS if name not in columns]
+            if missing:
+                raise BudgetAppError(
+                    f"CSV에 필수 컬럼이 없습니다: {', '.join(missing)}",
+                    f"헤더를 {','.join(CSV_COLUMNS)} 형식으로 맞추세요.",
+                )
+            for row in reader:
+                yield reader.line_num, row
+    except UnicodeDecodeError as error:
+        raise BudgetAppError(
+            "CSV 파일이 UTF-8 형식이 아닙니다.", "UTF-8로 저장한 뒤 다시 실행하세요."
+        ) from error
 
 
 def write_csv(path: Path, transactions: Iterable[Transaction]) -> int:
@@ -149,7 +170,10 @@ class TransactionRepository:
         """거래 파일 전체를 주어진 거래들로 안전하게 교체한다."""
         atomic_write(self.path, (_to_line(tx.to_dict()) for tx in transactions))
 
-    def next_id(self, offset: int = 0) -> str:
-        """파일을 끝까지 읽어 가장 큰 번호 다음의 id를 돌려준다."""
+    def next_ids(self, count: int) -> list[str]:
+        """파일을 끝까지 읽어 가장 큰 번호 다음의 id를 count개 돌려준다."""
         largest = max((tx.id_number for tx in self.iter_all()), default=0)
-        return f"TX-{largest + 1 + offset:06d}"
+        return [f"TX-{largest + step:06d}" for step in range(1, count + 1)]
+
+    def next_id(self) -> str:
+        return self.next_ids(1)[0]

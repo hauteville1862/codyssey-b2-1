@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
+from unittest.mock import patch
 
 from budget_app.errors import BudgetAppError
 from budget_app.services import BudgetService, SearchFilters
@@ -401,6 +402,119 @@ class ExportTest(QueryTestCase):
             self.service.export_csv(path, SearchFilters(month="2024-01"))
 
         self.assertEqual(path.read_bytes(), before)
+
+
+HEADER = "date,type,category,amount,memo,tags\n"
+
+
+class ImportTest(QueryTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.csv_path = self.data_dir.parent / "import.csv"
+        self.tx_path = self.data_dir / "transactions.jsonl"
+
+    def write_csv(self, text: str) -> None:
+        self.csv_path.write_text(text, encoding="utf-8")
+
+    def import_expecting_error(self) -> BudgetAppError:
+        before = self.tx_path.read_bytes()
+        with self.assertRaises(BudgetAppError) as caught:
+            self.service.import_csv(self.csv_path)
+        self.assertEqual(self.tx_path.read_bytes(), before)
+        self.assertTrue(caught.exception.hint)
+        return caught.exception
+
+    def test_valid_file_gets_new_consecutive_ids_after_existing(self) -> None:
+        self.add("2024-01-01")
+        self.write_csv(
+            HEADER
+            + "2024-01-15,expense,food,15000,점심,\"meal,lunch\"\n"
+            + "2024-01-16,income,salary,3000000,,\n"
+        )
+
+        count = self.service.import_csv(self.csv_path)
+
+        self.assertEqual(count, 2)
+        stored = list(self.service.transactions.iter_all())
+        self.assertEqual(
+            [tx.id for tx in stored], ["TX-000001", "TX-000002", "TX-000003"]
+        )
+        self.assertEqual(stored[1].amount, 15000)
+        self.assertEqual(stored[1].tags, ["meal", "lunch"])
+
+    def test_broken_rows_cancel_everything_and_report_each_row(self) -> None:
+        self.add("2024-01-01")
+        self.write_csv(
+            HEADER
+            + "2024-01-15,expense,food,15000,,\n"
+            + "2024-13-40,expense,food,1000,,\n"
+            + "2024-01-16,gift,food,1000,,\n"
+            + "2024-01-17,expense,nope,1000,,\n"
+            + "2024-01-18,expense,food,0,,\n"
+        )
+
+        error = self.import_expecting_error()
+
+        for line_number in ["3번째 줄", "4번째 줄", "5번째 줄", "6번째 줄"]:
+            self.assertIn(line_number, error.message)
+        self.assertNotIn("2번째 줄", error.message)
+
+    def test_row_with_wrong_column_count_is_broken(self) -> None:
+        for row in ["2024-01-15,expense,food\n", "2024-01-15,expense,food,1,m,t,extra\n"]:
+            with self.subTest(row=row):
+                self.write_csv(HEADER + row)
+
+                self.assertIn("2번째 줄", self.import_expecting_error().message)
+
+    def test_missing_required_column_is_rejected(self) -> None:
+        self.write_csv("date,type,category\n2024-01-15,expense,food\n")
+
+        self.assertIn("amount", self.import_expecting_error().message)
+
+    def test_optional_columns_may_be_absent(self) -> None:
+        self.write_csv("date,type,category,amount\n2024-01-15,expense,food,1000\n")
+
+        self.assertEqual(self.service.import_csv(self.csv_path), 1)
+        transaction = next(self.service.transactions.iter_all())
+        self.assertEqual(transaction.memo, "")
+        self.assertEqual(transaction.tags, [])
+
+    def test_utf8_bom_from_excel_is_handled(self) -> None:
+        self.csv_path.write_bytes(
+            b"\xef\xbb\xbf" + (HEADER + "2024-01-15,expense,food,1000,,\n").encode()
+        )
+
+        self.assertEqual(self.service.import_csv(self.csv_path), 1)
+
+    def test_cp949_file_is_rejected_with_utf8_hint(self) -> None:
+        self.csv_path.write_bytes(
+            (HEADER + "2024-01-15,expense,food,1000,점심,\n").encode("cp949")
+        )
+
+        self.assertIn("UTF-8", self.import_expecting_error().hint)
+
+    def test_failure_while_saving_keeps_transaction_file(self) -> None:
+        self.add("2024-01-01")
+        self.write_csv(HEADER + "2024-01-15,expense,food,1000,,\n")
+        before = self.tx_path.read_bytes()
+
+        with patch("budget_app.repository.os.replace", side_effect=OSError("disk")):
+            with self.assertRaises(OSError):
+                self.service.import_csv(self.csv_path)
+
+        self.assertEqual(self.tx_path.read_bytes(), before)
+
+    def test_memo_with_special_characters_survives_export_and_import(self) -> None:
+        memo = '점심, "김밥"\n둘째 줄'
+        self.add("2024-01-15", memo=memo, tags=["meal", "lunch"])
+        exported = self.data_dir.parent / "roundtrip.csv"
+        self.service.export_csv(exported, SearchFilters(month="2024-01"))
+
+        self.service.import_csv(exported)
+
+        imported = list(self.service.transactions.iter_all())[1]
+        self.assertEqual(imported.memo, memo)
+        self.assertEqual(imported.tags, ["meal", "lunch"])
 
 
 class SearchConditionTest(QueryTestCase):

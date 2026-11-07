@@ -453,6 +453,55 @@ class ExportCommandTest(AppTestCase):
         self.assertEqual(self.out.read_bytes(), before)
 
 
+class ImportCommandTest(AppTestCase):
+    def test_sample_ok_file_is_imported_with_count(self) -> None:
+        result = self.run_in_data_dir("import", "--from", "samples/import_ok.csv")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertRegex(result.stdout, r"\[완료\] imported=[1-9]\d*, skipped=0")
+
+    def test_sample_broken_file_changes_nothing_and_reports_rows(self) -> None:
+        result = self.run_in_data_dir("import", "--from", "samples/import_broken.csv")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertRegex(result.stderr, r"\d+번째 줄")
+        self.assertIn("[힌트]", result.stderr)
+        self.assertIn("거래 내역이 없습니다", self.run_in_data_dir("list").stdout)
+
+    def test_missing_file_prints_hint_without_traceback(self) -> None:
+        result = self.run_in_data_dir("import", "--from", "samples/no_such_file.csv")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[힌트]", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
+class AllCommandsHelpTest(unittest.TestCase):
+    def test_every_command_prints_help_with_exit_zero(self) -> None:
+        commands = [
+            ["add"],
+            ["list"],
+            ["search"],
+            ["summary"],
+            ["budget"],
+            ["budget", "set"],
+            ["category"],
+            ["category", "add"],
+            ["category", "list"],
+            ["category", "remove"],
+            ["update"],
+            ["delete"],
+            ["import"],
+            ["export"],
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                result = run_app(*command, "--help")
+
+                self.assertEqual(result.returncode, 0)
+                self.assertIn("usage", result.stdout.lower())
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

@@ -1,0 +1,7 @@
+date,type,category,amount,memo,tags
+2024-02-01,expense,food,9000,정상 행,
+2024-13-40,expense,food,9000,없는 날짜,
+2024-02-03,gift,food,9000,잘못된 타입,
+2024-02-04,expense,nope,9000,미등록 카테고리,
+2024-02-05,expense,food,0,0원,
+2024-02-06,expense,food

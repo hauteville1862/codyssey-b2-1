@@ -1,5 +1,6 @@
 import heapq
 from dataclasses import dataclass, replace
+from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -16,6 +17,7 @@ from budget_app.repository import (
     BudgetStore,
     CategoryStore,
     TransactionRepository,
+    read_csv_rows,
     write_csv,
 )
 
@@ -58,6 +60,24 @@ class SearchFilters:
             and (self.q is None or self.q.lower() in tx.memo.lower())
             and (self.tag is None or self.tag in tx.tags)
         )
+
+
+def _parse_csv_row(row: dict[Any, Any], categories: list[str]) -> dict[str, Any]:
+    """CSV 한 행을 검증해 Transaction에 넘길 값으로 바꾼다."""
+    if None in row or None in row.values():
+        raise BudgetAppError("열 개수가 헤더와 다릅니다.", "CSV 행을 확인하세요.")
+    if row["category"] not in categories:
+        raise BudgetAppError(
+            f"등록되지 않은 카테고리입니다: {row['category']}", "category add로 등록하세요."
+        )
+    return {
+        "date": parse_date(row["date"]),
+        "type": parse_type(row["type"]),
+        "category": row["category"],
+        "amount": parse_amount(row["amount"]),
+        "memo": row.get("memo", ""),
+        "tags": parse_tags(row.get("tags", "")),
+    }
 
 
 @dataclass
@@ -220,6 +240,26 @@ class BudgetService:
                 "--month YYYY-MM 또는 --from YYYY-MM-DD --to YYYY-MM-DD를 입력하세요.",
             )
         return write_csv(out, self.iter_matching(filters))
+
+    def import_csv(self, path: Path) -> int:
+        """모든 행을 먼저 검증하고, 하나라도 깨졌으면 아무것도 저장하지 않는다."""
+        categories = self.categories.list_all()
+        rows: list[dict[str, Any]] = []
+        problems: list[str] = []
+        for line_number, row in read_csv_rows(path):
+            try:
+                rows.append(_parse_csv_row(row, categories))
+            except BudgetAppError as error:
+                problems.append(f"{line_number}번째 줄: {error.message}")
+        if problems:
+            raise BudgetAppError(
+                "깨진 행이 있어 아무것도 가져오지 않았습니다.\n" + "\n".join(problems),
+                "CSV의 해당 행을 고친 뒤 파일 전체를 다시 가져오세요.",
+            )
+        ids = self.transactions.next_ids(len(rows))
+        new = [Transaction(id=tx_id, **row) for tx_id, row in zip(ids, rows)]
+        self.transactions.replace_all(chain(self.transactions.iter_all(), new))
+        return len(new)
 
     def search(self, filters: SearchFilters, limit: int = 20) -> list[Transaction]:
         """파일을 끝까지 읽되, 메모리에는 최신 거래 limit건만 유지한다."""

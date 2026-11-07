@@ -121,10 +121,10 @@ class TransactionRepositoryTest(unittest.TestCase):
 
         self.assertEqual(self.repository.next_id(), "TX-000013")
 
-    def test_next_id_offset_returns_later_number(self) -> None:
+    def test_next_ids_returns_consecutive_numbers(self) -> None:
         self.repository.append(make_transaction("TX-000012"))
 
-        self.assertEqual(self.repository.next_id(1), "TX-000014")
+        self.assertEqual(self.repository.next_ids(2), ["TX-000013", "TX-000014"])
 
     def test_next_id_compares_numbers_beyond_six_digits(self) -> None:
         self.repository.append(make_transaction("TX-999999"))

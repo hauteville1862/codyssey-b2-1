@@ -148,6 +148,13 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+def cmd_import(args: argparse.Namespace) -> int:
+    count = BudgetService(args.data_dir).import_csv(args.source)
+    print(f"[완료] imported={count}, skipped=0")
+    return 0
+
+
+@handle_errors
 def cmd_category_list(args: argparse.Namespace) -> int:
     for name in BudgetService(args.data_dir).categories.list_all():
         print(f"- {name}")
@@ -244,6 +251,12 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--from", dest="date_from", help="시작일 YYYY-MM-DD")
     export.add_argument("--to", dest="date_to", help="종료일 YYYY-MM-DD")
     export.set_defaults(handler=cmd_export)
+
+    import_parser = commands.add_parser("import", help="CSV에서 거래 가져오기")
+    import_parser.add_argument(
+        "--from", dest="source", type=Path, required=True, help="가져올 CSV 파일"
+    )
+    import_parser.set_defaults(handler=cmd_import)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")
