@@ -69,6 +69,10 @@ class CategoryStore:
     def add(self, name: str) -> None:
         append_jsonl(self.path, {"name": name})
 
+    def remove(self, name: str) -> None:
+        kept = [other for other in self.list_all() if other != name]
+        atomic_write(self.path, (_to_line({"name": other}) for other in kept))
+
 
 class TransactionRepository:
     """거래 파일을 읽고 쓰는 책임만 맡는다. 업무 규칙은 서비스가 맡는다."""

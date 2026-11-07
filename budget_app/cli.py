@@ -120,6 +120,14 @@ def cmd_category_add(args: argparse.Namespace) -> int:
     return 0
 
 
+@handle_errors
+def cmd_category_remove(args: argparse.Namespace) -> int:
+    service = BudgetService(args.data_dir)
+    name = service.remove_category(input("삭제할 카테고리명: "))
+    print(f"[삭제 완료] category={name}")
+    return 0
+
+
 def positive_int(value: str) -> int:
     """--limit, --top의 값을 검사한다. 잘못되면 argparse가 사용법 오류로 처리한다."""
     try:
@@ -179,6 +187,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     actions.add_parser("add", help="카테고리 추가 (대화형)").set_defaults(
         handler=cmd_category_add
+    )
+    actions.add_parser("remove", help="카테고리 삭제 (대화형)").set_defaults(
+        handler=cmd_category_remove
     )
     return parser
 

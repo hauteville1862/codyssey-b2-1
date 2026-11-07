@@ -104,6 +104,25 @@ class CategoryCommandTest(AppTestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+class CategoryRemoveCommandTest(AppTestCase):
+    def test_unused_category_is_removed_interactively(self) -> None:
+        result = self.run_in_data_dir("category", "remove", stdin="rent\n")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[삭제 완료] category=rent", result.stdout)
+        self.assertNotIn("- rent", self.run_in_data_dir("category", "list").stdout)
+
+    def test_category_in_use_exits_with_error_and_hint(self) -> None:
+        self.run_in_data_dir("add", stdin="2024-01-01\nexpense\nfood\n1000\n\n\n")
+
+        result = self.run_in_data_dir("category", "remove", stdin="food\n")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[오류]", result.stderr)
+        self.assertIn("[힌트]", result.stderr)
+        self.assertIn("- food", self.run_in_data_dir("category", "list").stdout)
+
+
 class AddCommandTest(AppTestCase):
     def transaction_lines(self) -> list[str]:
         path = self.data_dir / "transactions.jsonl"

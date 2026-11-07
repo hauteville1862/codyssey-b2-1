@@ -65,6 +65,41 @@ class AddTransactionTest(ServiceTestCase):
         self.assertEqual(list(self.service.transactions.iter_all()), [])
 
 
+class RemoveCategoryTest(ServiceTestCase):
+    def test_unused_category_is_removed(self) -> None:
+        self.service.remove_category("rent")
+
+        self.assertEqual(
+            self.service.categories.list_all(), ["food", "transport", "etc", "salary"]
+        )
+
+    def test_category_in_use_is_blocked_with_count_and_file_stays_the_same(self) -> None:
+        for _ in range(2):
+            self.service.add_transaction("expense", "2024-01-01", 1, "food", "", [])
+        path = self.data_dir / "categories.jsonl"
+        before = path.read_bytes()
+
+        with self.assertRaises(BudgetAppError) as caught:
+            self.service.remove_category("food")
+
+        self.assertIn("2건", caught.exception.message)
+        self.assertIn("update", caught.exception.hint)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_unknown_category_is_rejected(self) -> None:
+        with self.assertRaises(BudgetAppError):
+            self.service.remove_category("nope")
+
+    def test_removing_every_category_restores_defaults_on_next_run(self) -> None:
+        for name in ["food", "transport", "rent", "etc", "salary"]:
+            self.service.remove_category(name)
+
+        self.assertEqual(
+            BudgetService(self.data_dir).categories.list_all(),
+            ["food", "transport", "rent", "etc", "salary"],
+        )
+
+
 class QueryTestCase(ServiceTestCase):
     def add(
         self,

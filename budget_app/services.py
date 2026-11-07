@@ -82,6 +82,17 @@ class BudgetService:
         self.categories.add(name)
         return name
 
+    def remove_category(self, name: str) -> str:
+        name = self.require_category(name.strip())
+        in_use = sum(1 for _ in self.iter_matching(SearchFilters(category=name)))
+        if in_use:
+            raise BudgetAppError(
+                f"사용 중인 카테고리는 삭제할 수 없습니다: {name} ({in_use}건)",
+                "update --id <id> --category <다른 카테고리>로 거래를 옮긴 뒤 다시 삭제하세요.",
+            )
+        self.categories.remove(name)
+        return name
+
     def require_category(self, name: str) -> str:
         categories = self.categories.list_all()
         if name not in categories:
