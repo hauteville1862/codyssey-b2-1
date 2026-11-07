@@ -217,6 +217,43 @@ class UpdateTransactionTest(QueryTestCase):
                 self.assertEqual(path.read_bytes(), before)
 
 
+class MonthlySummaryTest(QueryTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.add("2024-01-05", tx_type="income", category="salary", amount=3000000)
+        self.add("2024-01-10", category="rent", amount=150000)
+        self.add("2024-01-11", category="food", amount=30000)
+        self.add("2024-01-31", category="food", amount=15000)
+        self.add("2024-01-20", category="transport", amount=45000)
+        self.add("2024-02-01", category="etc", amount=999)
+
+    def test_totals_and_balance_include_only_that_month(self) -> None:
+        summary = self.service.monthly_summary("2024-01", top=5)
+
+        self.assertTrue(summary.has_data)
+        self.assertEqual(summary.income, 3000000)
+        self.assertEqual(summary.expense, 240000)
+        self.assertEqual(summary.balance, 2760000)
+
+    def test_top_sorts_by_amount_then_category_name_and_limits(self) -> None:
+        summary = self.service.monthly_summary("2024-01", top=2)
+
+        self.assertEqual(summary.top, [("rent", 150000), ("food", 45000)])
+
+        tied = self.service.monthly_summary("2024-01", top=5)
+        self.assertEqual(tied.top[1:], [("food", 45000), ("transport", 45000)])
+
+    def test_month_without_data_has_no_data_flag(self) -> None:
+        summary = self.service.monthly_summary("2023-12", top=5)
+
+        self.assertFalse(summary.has_data)
+        self.assertEqual(summary.balance, 0)
+
+    def test_invalid_month_is_rejected(self) -> None:
+        with self.assertRaises(BudgetAppError):
+            self.service.monthly_summary("2024-13", top=5)
+
+
 class SearchConditionTest(QueryTestCase):
     def setUp(self) -> None:
         super().setUp()

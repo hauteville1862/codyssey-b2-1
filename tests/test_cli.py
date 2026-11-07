@@ -319,6 +319,43 @@ class UpdateCommandTest(AppTestCase):
         self.assertIn("없는 데이터", result.stderr)
 
 
+class SummaryCommandTest(AppTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        for record in [
+            "2024-01-05\nincome\nsalary\n3000000\n\n\n",
+            "2024-01-10\nexpense\nrent\n150000\n\n\n",
+            "2024-01-11\nexpense\nfood\n45000\n\n\n",
+        ]:
+            self.run_in_data_dir("add", stdin=record)
+
+    def test_summary_prints_totals_and_top_categories(self) -> None:
+        result = self.run_in_data_dir("summary", "--month", "2024-01", "--top", "1")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("총 수입: 3000000원", result.stdout)
+        self.assertIn("총 지출: 195000원", result.stdout)
+        self.assertIn("잔액: 2805000원", result.stdout)
+        self.assertIn("지출 TOP 1", result.stdout)
+        self.assertIn("1) rent 150000원", result.stdout)
+        self.assertNotIn("food", result.stdout)
+
+    def test_month_without_data_prints_no_data(self) -> None:
+        result = self.run_in_data_dir("summary", "--month", "2023-12")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("데이터 없음", result.stdout)
+
+    def test_invalid_month_exits_with_error_and_hint(self) -> None:
+        result = self.run_in_data_dir("summary", "--month", "2024-13")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[힌트]", result.stderr)
+
+    def test_missing_month_is_usage_error(self) -> None:
+        self.assertEqual(self.run_in_data_dir("summary").returncode, 2)
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

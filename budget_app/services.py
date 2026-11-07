@@ -55,6 +55,20 @@ class SearchFilters:
         )
 
 
+@dataclass
+class MonthlySummary:
+    """한 달의 요약 결과."""
+
+    month: str
+    income: int
+    expense: int
+    balance: int
+    top: list[tuple[str, int]]
+    has_data: bool
+    budget: int | None = None
+    usage_percent: float | None = None
+
+
 class BudgetService:
     """가계부의 업무 규칙을 맡는다. 파일 처리는 저장소에 맡긴다."""
 
@@ -157,6 +171,25 @@ class BudgetService:
         for transaction in self.transactions.iter_all():
             if filters.matches(transaction):
                 yield transaction
+
+    def monthly_summary(self, month: str, top: int) -> MonthlySummary:
+        """거래를 한 건씩 읽으며 합계만 유지한다."""
+        income = expense = 0
+        has_data = False
+        spent: dict[str, int] = {}
+        for transaction in self.iter_matching(SearchFilters(month=month)):
+            has_data = True
+            if transaction.type == "income":
+                income += transaction.amount
+            else:
+                expense += transaction.amount
+                spent[transaction.category] = (
+                    spent.get(transaction.category, 0) + transaction.amount
+                )
+        ranked = sorted(spent.items(), key=lambda item: (-item[1], item[0]))
+        return MonthlySummary(
+            month, income, expense, income - expense, ranked[:top], has_data
+        )
 
     def search(self, filters: SearchFilters, limit: int = 20) -> list[Transaction]:
         """파일을 끝까지 읽되, 메모리에는 최신 거래 limit건만 유지한다."""

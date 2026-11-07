@@ -106,6 +106,21 @@ def cmd_update(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+def cmd_summary(args: argparse.Namespace) -> int:
+    summary = BudgetService(args.data_dir).monthly_summary(args.month, args.top)
+    if not summary.has_data:
+        print("데이터 없음")
+        return 0
+    print(f"총 수입: {summary.income}원")
+    print(f"총 지출: {summary.expense}원")
+    print(f"잔액: {summary.balance}원")
+    print(f"지출 TOP {args.top}")
+    for rank, (category, amount) in enumerate(summary.top, start=1):
+        print(f"{rank}) {category} {amount}원")
+    return 0
+
+
+@handle_errors
 def cmd_category_list(args: argparse.Namespace) -> int:
     for name in BudgetService(args.data_dir).categories.list_all():
         print(f"- {name}")
@@ -179,6 +194,13 @@ def build_parser() -> argparse.ArgumentParser:
     update.add_argument("--memo", help='메모 ("" 를 주면 비움)')
     update.add_argument("--tags", help='쉼표로 구분한 태그 ("" 를 주면 비움)')
     update.set_defaults(handler=cmd_update)
+
+    summary = commands.add_parser("summary", help="월별 요약")
+    summary.add_argument("--month", required=True, help="월 YYYY-MM")
+    summary.add_argument(
+        "--top", type=positive_int, default=5, help="지출 상위 개수 (기본값: 5)"
+    )
+    summary.set_defaults(handler=cmd_summary)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")
