@@ -104,6 +104,42 @@ class CategoryCommandTest(AppTestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+class AddCommandTest(AppTestCase):
+    def transaction_lines(self) -> list[str]:
+        path = self.data_dir / "transactions.jsonl"
+        return path.read_text(encoding="utf-8").splitlines()
+
+    def test_add_saves_transaction_and_prints_id(self) -> None:
+        result = self.run_in_data_dir(
+            "add", stdin="2024-01-15\nexpense\nfood\n15000\n점심\nmeal, lunch\n"
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[저장 완료] id=TX-000001", result.stdout)
+        self.assertEqual(len(self.transaction_lines()), 1)
+        self.assertIn('"tags": ["meal", "lunch"]', self.transaction_lines()[0])
+
+    def test_invalid_answers_are_asked_again(self) -> None:
+        result = self.run_in_data_dir(
+            "add",
+            stdin="2024-13-40\n2024-01-15\ngift\nexpense\nnope\nfood\n0\n15000\n\n\n",
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[저장 완료] id=TX-000001", result.stdout)
+        self.assertEqual(result.stderr.count("[오류]"), 4)
+        self.assertEqual(result.stderr.count("[힌트]"), 4)
+        self.assertIn("food", result.stderr)
+
+    def test_input_ending_midway_saves_nothing(self) -> None:
+        result = self.run_in_data_dir("add", stdin="2024-01-15\nexpense\n")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[오류]", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(self.transaction_lines(), [])
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

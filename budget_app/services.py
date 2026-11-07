@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from budget_app.errors import BudgetAppError
+from budget_app.models import Transaction
 from budget_app.repository import CategoryStore, TransactionRepository
 
 DEFAULT_CATEGORIES = ("food", "transport", "rent", "etc", "salary")
@@ -32,3 +33,28 @@ class BudgetService:
             )
         self.categories.add(name)
         return name
+
+    def require_category(self, name: str) -> str:
+        categories = self.categories.list_all()
+        if name not in categories:
+            raise BudgetAppError(
+                f"등록되지 않은 카테고리입니다: {name}",
+                f"등록된 카테고리: {', '.join(categories)}",
+            )
+        return name
+
+    def add_transaction(
+        self,
+        tx_type: str,
+        date: str,
+        amount: int,
+        category: str,
+        memo: str,
+        tags: list[str],
+    ) -> Transaction:
+        self.require_category(category)
+        transaction = Transaction(
+            self.transactions.next_id(), tx_type, date, amount, category, memo, tags
+        )
+        self.transactions.append(transaction)
+        return transaction

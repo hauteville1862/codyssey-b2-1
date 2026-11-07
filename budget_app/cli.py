@@ -1,12 +1,16 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import Callable, NoReturn, TypeVar
 
-from budget_app.decorators import handle_errors
+from budget_app.decorators import handle_errors, report_error
+from budget_app.errors import BudgetAppError
+from budget_app.models import parse_amount, parse_date, parse_tags, parse_type
 from budget_app.services import BudgetService
 
 PROG = "python3 -m budget_app"
+
+T = TypeVar("T")
 
 
 class BudgetArgumentParser(argparse.ArgumentParser):
@@ -16,6 +20,30 @@ class BudgetArgumentParser(argparse.ArgumentParser):
         print(f"[오류] {message}", file=sys.stderr)
         print(f"[힌트] {self.prog} --help 로 사용법을 확인하세요.", file=sys.stderr)
         sys.exit(2)
+
+
+def ask(prompt: str, parse: Callable[[str], T]) -> T:
+    """올바른 값을 입력할 때까지 다시 묻는다."""
+    while True:
+        try:
+            return parse(input(prompt))
+        except BudgetAppError as error:
+            report_error(error.message, error.hint)
+
+
+@handle_errors
+def cmd_add(args: argparse.Namespace) -> int:
+    service = BudgetService(args.data_dir)
+    transaction = service.add_transaction(
+        date=ask("날짜(YYYY-MM-DD): ", parse_date),
+        tx_type=ask("타입(income/expense): ", parse_type),
+        category=ask("카테고리: ", service.require_category),
+        amount=ask("금액(양수): ", parse_amount),
+        memo=input("메모(선택): "),
+        tags=parse_tags(input("태그(쉼표로 구분, 없으면 엔터): ")),
+    )
+    print(f"[저장 완료] id={transaction.id}")
+    return 0
 
 
 @handle_errors
@@ -42,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="저장 폴더 (기본값: ./data)",
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="<command>")
+
+    commands.add_parser("add", help="거래 추가 (대화형)").set_defaults(handler=cmd_add)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")

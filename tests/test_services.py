@@ -43,5 +43,26 @@ class CategoryServiceTest(ServiceTestCase):
         self.assertIn("2번째 줄", caught.exception.message)
 
 
+class AddTransactionTest(ServiceTestCase):
+    def test_add_transaction_assigns_increasing_ids(self) -> None:
+        first = self.service.add_transaction(
+            "expense", "2024-01-15", 15000, "food", "점심", ["meal"]
+        )
+        second = self.service.add_transaction(
+            "income", "2024-01-16", 3000000, "salary", "", []
+        )
+
+        self.assertEqual(first.id, "TX-000001")
+        self.assertEqual(second.id, "TX-000002")
+        self.assertEqual(list(self.service.transactions.iter_all()), [first, second])
+
+    def test_add_transaction_rejects_unregistered_category(self) -> None:
+        with self.assertRaises(BudgetAppError) as caught:
+            self.service.add_transaction("expense", "2024-01-15", 1000, "nope", "", [])
+
+        self.assertIn("food", caught.exception.hint)
+        self.assertEqual(list(self.service.transactions.iter_all()), [])
+
+
 if __name__ == "__main__":
     unittest.main()
