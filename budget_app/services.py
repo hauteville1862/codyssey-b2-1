@@ -12,7 +12,12 @@ from budget_app.models import (
     parse_tags,
     parse_type,
 )
-from budget_app.repository import BudgetStore, CategoryStore, TransactionRepository
+from budget_app.repository import (
+    BudgetStore,
+    CategoryStore,
+    TransactionRepository,
+    write_csv,
+)
 
 DEFAULT_CATEGORIES = ("food", "transport", "rent", "etc", "salary")
 
@@ -205,6 +210,16 @@ class BudgetService:
         parsed_amount = parse_amount(amount)
         self.budgets.set(parse_month(month), parsed_amount)
         return parsed_amount
+
+    def export_csv(self, out: Path, filters: SearchFilters) -> int:
+        has_period = filters.date_from is not None and filters.date_to is not None
+        has_partial_period = (filters.date_from is None) != (filters.date_to is None)
+        if has_partial_period or not (filters.month or has_period):
+            raise BudgetAppError(
+                "내보낼 조건이 부족합니다.",
+                "--month YYYY-MM 또는 --from YYYY-MM-DD --to YYYY-MM-DD를 입력하세요.",
+            )
+        return write_csv(out, self.iter_matching(filters))
 
     def search(self, filters: SearchFilters, limit: int = 20) -> list[Transaction]:
         """파일을 끝까지 읽되, 메모리에는 최신 거래 limit건만 유지한다."""

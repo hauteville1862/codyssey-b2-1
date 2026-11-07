@@ -138,6 +138,16 @@ def cmd_budget_set(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+def cmd_export(args: argparse.Namespace) -> int:
+    filters = SearchFilters(
+        month=args.month, date_from=args.date_from, date_to=args.date_to
+    )
+    count = BudgetService(args.data_dir).export_csv(args.out, filters)
+    print(f"[완료] {args.out} ({count} records)")
+    return 0
+
+
+@handle_errors
 def cmd_category_list(args: argparse.Namespace) -> int:
     for name in BudgetService(args.data_dir).categories.list_all():
         print(f"- {name}")
@@ -227,6 +237,13 @@ def build_parser() -> argparse.ArgumentParser:
     budget_set.add_argument("--month", required=True, help="월 YYYY-MM")
     budget_set.add_argument("--amount", required=True, help="금액 (양의 정수)")
     budget_set.set_defaults(handler=cmd_budget_set)
+
+    export = commands.add_parser("export", help="거래를 CSV로 내보내기")
+    export.add_argument("--out", type=Path, required=True, help="새로 만들 CSV 파일")
+    export.add_argument("--month", help="월 YYYY-MM")
+    export.add_argument("--from", dest="date_from", help="시작일 YYYY-MM-DD")
+    export.add_argument("--to", dest="date_to", help="종료일 YYYY-MM-DD")
+    export.set_defaults(handler=cmd_export)
 
     category = commands.add_parser("category", help="카테고리 관리")
     actions = category.add_subparsers(dest="action", required=True, metavar="<action>")

@@ -414,6 +414,45 @@ class BudgetCommandTest(AppTestCase):
         self.assertIn("[힌트]", result.stderr)
 
 
+class ExportCommandTest(AppTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.out = self.data_dir.parent / "export.csv"
+        self.run_in_data_dir("add", stdin="2024-01-15\nexpense\nfood\n1000\n\n\n")
+
+    def test_export_prints_path_and_record_count(self) -> None:
+        result = self.run_in_data_dir("export", "--out", str(self.out), "--month", "2024-01")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("(1 records)", result.stdout)
+        self.assertTrue(self.out.exists())
+
+    def test_invalid_conditions_exit_with_error_and_create_no_file(self) -> None:
+        wrong = [
+            [],
+            ["--from", "2024-01-01"],
+            ["--month", "2024-13"],
+            ["--from", "abc", "--to", "2024-01-31"],
+        ]
+        for options in wrong:
+            with self.subTest(options=options):
+                result = self.run_in_data_dir("export", "--out", str(self.out), *options)
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("[힌트]", result.stderr)
+                self.assertFalse(self.out.exists())
+
+    def test_existing_output_file_exits_with_error(self) -> None:
+        self.run_in_data_dir("export", "--out", str(self.out), "--month", "2024-01")
+        before = self.out.read_bytes()
+
+        result = self.run_in_data_dir("export", "--out", str(self.out), "--month", "2023-01")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[힌트]", result.stderr)
+        self.assertEqual(self.out.read_bytes(), before)
+
+
 class HandleErrorsTest(unittest.TestCase):
     def run_failing(self, error: BaseException) -> tuple[int, str]:
         def command(args: argparse.Namespace) -> int:

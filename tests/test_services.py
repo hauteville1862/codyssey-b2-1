@@ -1,3 +1,4 @@
+import csv
 import tempfile
 import unittest
 from pathlib import Path
@@ -303,6 +304,103 @@ class BudgetTest(QueryTestCase):
             self.service.budgets.get("2024-01")
 
         self.assertIn("1번째 줄", caught.exception.message)
+
+
+class ExportTest(QueryTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.out = self.data_dir.parent / "export.csv"
+
+    def exported_rows(self) -> list[dict[str, str]]:
+        with self.out.open(encoding="utf-8", newline="") as file:
+            return list(csv.DictReader(file))
+
+    def test_csv_uses_fixed_header_order_and_values(self) -> None:
+        self.add("2024-01-15", memo='점심, "김밥"', tags=["meal", "lunch"], amount=15000)
+
+        count = self.service.export_csv(self.out, SearchFilters(month="2024-01"))
+
+        self.assertEqual(count, 1)
+        first_line = self.out.read_text(encoding="utf-8").splitlines()[0]
+        self.assertEqual(first_line, "date,type,category,amount,memo,tags")
+        self.assertEqual(
+            self.exported_rows(),
+            [
+                {
+                    "date": "2024-01-15",
+                    "type": "expense",
+                    "category": "food",
+                    "amount": "15000",
+                    "memo": '점심, "김밥"',
+                    "tags": "meal,lunch",
+                }
+            ],
+        )
+
+    def test_month_includes_first_and_last_day_only(self) -> None:
+        for date in ["2023-12-31", "2024-01-01", "2024-01-31", "2024-02-01"]:
+            self.add(date)
+
+        self.service.export_csv(self.out, SearchFilters(month="2024-01"))
+
+        self.assertEqual(
+            [row["date"] for row in self.exported_rows()],
+            ["2024-01-01", "2024-01-31"],
+        )
+
+    def test_period_includes_boundaries_and_month_combines_as_and(self) -> None:
+        for date in ["2024-01-09", "2024-01-10", "2024-01-20", "2024-01-21", "2024-02-01"]:
+            self.add(date)
+
+        self.service.export_csv(
+            self.out,
+            SearchFilters(month="2024-01", date_from="2024-01-10", date_to="2024-02-01"),
+        )
+
+        self.assertEqual(
+            [row["date"] for row in self.exported_rows()],
+            ["2024-01-10", "2024-01-20", "2024-01-21"],
+        )
+
+    def test_no_match_writes_only_header(self) -> None:
+        count = self.service.export_csv(self.out, SearchFilters(month="2024-01"))
+
+        self.assertEqual(count, 0)
+        self.assertEqual(
+            self.out.read_text(encoding="utf-8"), "date,type,category,amount,memo,tags\n"
+        )
+
+    def test_missing_or_partial_conditions_are_rejected_without_file(self) -> None:
+        wrong = [
+            SearchFilters(),
+            SearchFilters(date_from="2024-01-01"),
+            SearchFilters(date_to="2024-01-01"),
+            SearchFilters(month="2024-01", date_from="2024-01-01"),
+        ]
+        for filters in wrong:
+            with self.subTest(filters=filters):
+                with self.assertRaises(BudgetAppError):
+                    self.service.export_csv(self.out, filters)
+                self.assertFalse(self.out.exists())
+
+    def test_existing_file_is_kept_and_rejected(self) -> None:
+        self.out.write_text("기존 내용", encoding="utf-8")
+
+        with self.assertRaises(BudgetAppError) as caught:
+            self.service.export_csv(self.out, SearchFilters(month="2024-01"))
+
+        self.assertTrue(caught.exception.hint)
+        self.assertEqual(self.out.read_text(encoding="utf-8"), "기존 내용")
+
+    def test_export_cannot_overwrite_transaction_file(self) -> None:
+        self.add("2024-01-15")
+        path = self.data_dir / "transactions.jsonl"
+        before = path.read_bytes()
+
+        with self.assertRaises(BudgetAppError):
+            self.service.export_csv(path, SearchFilters(month="2024-01"))
+
+        self.assertEqual(path.read_bytes(), before)
 
 
 class SearchConditionTest(QueryTestCase):

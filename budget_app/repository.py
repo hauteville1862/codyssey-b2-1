@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 from pathlib import Path
@@ -5,6 +6,8 @@ from typing import Any, Iterable, Iterator
 
 from budget_app.errors import BudgetAppError
 from budget_app.models import Transaction, parse_amount, parse_month
+
+CSV_COLUMNS = ("date", "type", "category", "amount", "memo", "tags")
 
 
 def _damaged_line(path: Path, line_number: int) -> BudgetAppError:
@@ -49,6 +52,26 @@ def atomic_write(path: Path, lines: Iterable[str]) -> None:
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
+
+
+def write_csv(path: Path, transactions: Iterable[Transaction]) -> int:
+    """새 CSV 파일에 거래를 쓴다. "x" 모드라 이미 있는 파일은 덮어쓰지 않는다."""
+    try:
+        file = path.open("x", encoding="utf-8", newline="")
+    except FileExistsError as error:
+        raise BudgetAppError(
+            f"이미 있는 파일입니다: {path}",
+            "다른 이름을 지정하거나 기존 파일을 지운 뒤 다시 실행하세요.",
+        ) from error
+    count = 0
+    with file:
+        writer = csv.writer(file, lineterminator="\n")
+        writer.writerow(CSV_COLUMNS)
+        for tx in transactions:
+            tags = ",".join(tx.tags)
+            writer.writerow([tx.date, tx.type, tx.category, tx.amount, tx.memo, tags])
+            count += 1
+    return count
 
 
 class CategoryStore:
