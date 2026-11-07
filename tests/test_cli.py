@@ -476,6 +476,59 @@ class ImportCommandTest(AppTestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+class ExecutionLogTest(AppTestCase):
+    def log_lines(self) -> list[str]:
+        path = self.data_dir / "app.log"
+        return path.read_text(encoding="utf-8").splitlines()
+
+    def test_success_is_recorded_with_time_and_command(self) -> None:
+        self.run_in_data_dir("category", "list")
+
+        self.assertRegex(
+            self.log_lines()[0],
+            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} category list 성공$",
+        )
+
+    def test_failure_is_recorded_and_error_still_reaches_user(self) -> None:
+        result = self.run_in_data_dir("delete", "--id", "TX-999999")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("없는 데이터", result.stderr)
+        self.assertRegex(self.log_lines()[0], r" delete 실패$")
+
+    def test_interrupted_input_is_recorded_as_failure(self) -> None:
+        result = self.run_in_data_dir("add", stdin="2024-01-15\n")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertRegex(self.log_lines()[0], r" add 실패$")
+
+    def test_each_run_adds_one_line(self) -> None:
+        self.run_in_data_dir("category", "list")
+        self.run_in_data_dir("list")
+
+        self.assertEqual(len(self.log_lines()), 2)
+
+    def test_log_does_not_contain_amount_or_memo(self) -> None:
+        self.run_in_data_dir(
+            "add", stdin="2024-01-15\nexpense\nfood\n987654\n비밀메모\nmeal\n"
+        )
+
+        log_text = "\n".join(self.log_lines())
+        self.assertRegex(log_text, r" add 성공$")
+        self.assertNotIn("987654", log_text)
+        self.assertNotIn("비밀메모", log_text)
+
+    def test_command_succeeds_when_log_cannot_be_written(self) -> None:
+        (self.data_dir / "app.log").mkdir(parents=True)
+
+        result = self.run_in_data_dir("category", "list")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("- food", result.stdout)
+        self.assertEqual(result.stderr, "")
+
+
 class AllCommandsHelpTest(unittest.TestCase):
     def test_every_command_prints_help_with_exit_zero(self) -> None:
         commands = [

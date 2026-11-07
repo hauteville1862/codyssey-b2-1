@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from typing import Callable, NoReturn, TypeVar
 
-from budget_app.decorators import handle_errors, report_error
+from budget_app.decorators import handle_errors, log_execution, report_error
 from budget_app.errors import BudgetAppError
 from budget_app.models import (
     Transaction,
@@ -38,6 +38,7 @@ def ask(prompt: str, parse: Callable[[str], T]) -> T:
 
 
 @handle_errors
+@log_execution
 def cmd_add(args: argparse.Namespace) -> int:
     service = BudgetService(args.data_dir)
     transaction = service.add_transaction(
@@ -58,6 +59,7 @@ def format_transaction(tx: Transaction) -> str:
 
 
 @handle_errors
+@log_execution
 def cmd_list(args: argparse.Namespace) -> int:
     transactions = BudgetService(args.data_dir).search(SearchFilters(), args.limit)
     if not transactions:
@@ -68,6 +70,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_search(args: argparse.Namespace) -> int:
     filters = SearchFilters(
         date_from=args.date_from,
@@ -88,6 +91,7 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_delete(args: argparse.Namespace) -> int:
     BudgetService(args.data_dir).delete_transaction(args.id)
     print(f"[삭제 완료] id={args.id}")
@@ -95,6 +99,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_update(args: argparse.Namespace) -> int:
     fields = ("date", "type", "category", "amount", "memo", "tags")
     changes = {
@@ -106,6 +111,7 @@ def cmd_update(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_summary(args: argparse.Namespace) -> int:
     summary = BudgetService(args.data_dir).monthly_summary(args.month, args.top)
     if not summary.has_data:
@@ -131,6 +137,7 @@ def print_budget(summary: MonthlySummary) -> None:
 
 
 @handle_errors
+@log_execution
 def cmd_budget_set(args: argparse.Namespace) -> int:
     amount = BudgetService(args.data_dir).set_budget(args.month, args.amount)
     print(f"[저장 완료] {args.month} 예산 {amount}원")
@@ -138,6 +145,7 @@ def cmd_budget_set(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_export(args: argparse.Namespace) -> int:
     filters = SearchFilters(
         month=args.month, date_from=args.date_from, date_to=args.date_to
@@ -148,6 +156,7 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_import(args: argparse.Namespace) -> int:
     count = BudgetService(args.data_dir).import_csv(args.source)
     print(f"[완료] imported={count}, skipped=0")
@@ -155,6 +164,7 @@ def cmd_import(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_category_list(args: argparse.Namespace) -> int:
     for name in BudgetService(args.data_dir).list_categories():
         print(f"- {name}")
@@ -162,6 +172,7 @@ def cmd_category_list(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_category_add(args: argparse.Namespace) -> int:
     service = BudgetService(args.data_dir)
     name = service.add_category(input("카테고리명: "))
@@ -170,6 +181,7 @@ def cmd_category_add(args: argparse.Namespace) -> int:
 
 
 @handle_errors
+@log_execution
 def cmd_category_remove(args: argparse.Namespace) -> int:
     service = BudgetService(args.data_dir)
     name = service.remove_category(input("삭제할 카테고리명: "))
