@@ -56,7 +56,7 @@
 ### 기획서 검토에서 에이전트가 제안해 승인받음
 
 **입력과 출력**
-- `--data-dir`은 하위 명령 앞에 쓴다. 예: `python -m budget_app --data-dir ./demo-data list`
+- `--data-dir`은 하위 명령 앞에 쓴다. 예: `python3 -m budget_app --data-dir ./demo-data list`
 - `add`에서 잘못 입력하면 `[오류]`와 `[힌트]`를 출력하고 그 항목을 다시 묻는다.
 - `category add`와 `category remove`는 대화형으로 입력받는다. 미션 상세 4-1절의 옵션 허용 목록에 없기 때문이다.
 - 날짜는 `2024-01-05` 형식만 받는다. 파싱한 값을 다시 문자열로 바꿔 입력과 비교하므로 `2024-1-5`와 `2024-02-30`은 거부된다. 달도 같은 방식으로 검사한다.
@@ -87,7 +87,7 @@
 | 파일 | 책임 |
 |---|---|
 | `budget_app/__init__.py` | 패키지 표시. 내용 없음 |
-| `budget_app/__main__.py` | `python -m budget_app`의 진입점 |
+| `budget_app/__main__.py` | `python3 -m budget_app`의 진입점 |
 | `budget_app/cli.py` | 명령 정의, `input()`, 출력. 계산과 파일 입출력은 하지 않음 |
 | `budget_app/services.py` | 업무 규칙: 추가, 조회, 요약, 카테고리 삭제 규칙, import 검증. `SearchFilters`와 `MonthlySummary`를 정의 |
 | `budget_app/repository.py` | 거래, 카테고리, 예산의 JSONL 저장과 CSV 입출력, 임시 파일 교체 |
@@ -122,7 +122,7 @@
 - 미션 기준은 Python 3.10 이상이다. 코드는 3.10 문법에 맞춰 쓰고, 3.11 이후에만 있는 기능을 쓰지 않는다.
 - `pip install`이 필요한 라이브러리를 쓰지 않는다.
 - 모든 함수의 매개변수와 반환값에 타입 힌트를 적는다. E13의 확인은 별도 도구 없이 코드로 한다. 함수 시그니처와 이를 호출하는 코드를 나란히 읽어, 입출력 약속을 설명한다.
-- 실행 환경은 이미 설치된 Python 3.15.2로 `python3 -m venv .venv`를 실행해 만들고, 활성화한 뒤 `python` 명령을 쓴다. 이 컴퓨터의 기본 환경에는 `python` 명령이 없다.
+- 실행 환경은 이미 설치된 기본 `python3`(현재 3.15.2)이며, 가상환경은 만들지 않는다. 모든 명령은 `python3`으로 실행한다. macOS 기본 `/usr/bin/python3`은 3.9.6으로 미션 기준에 미달하므로, 시연 전에 `python3 --version`을 확인한다.
 - 스택트레이스를 출력하지 않고, 오류는 `[오류]`와 `[힌트]`로 출력하며, 오류 시 0이 아닌 코드로 종료한다.
 - 거래 파일 전체를 메모리에 모으지 않는다. `list`/`search`는 최신 N개, `summary`는 합계만 유지하고, `export`와 재작성은 한 줄씩 처리한다.
 - CSV는 UTF-8과 헤더를 쓰며, 컬럼은 `date,type,category,amount,memo,tags` 순서다.
@@ -143,7 +143,7 @@
 
 **단계 시작 전 점검:** 각 단계를 시작하기 전에 `git status`와 GitHub `main`의 커밋을 확인해 사용자에게 알린다. 커밋하지 않은 변경이 있으면 커밋하고, 푸시하지 않은 커밋이 있으면 푸시 여부를 묻는다. 푸시는 사용자가 승인할 때만 한다.
 
-**전체 테스트 명령:** `python -m unittest discover -s tests -v`
+**전체 테스트 명령:** `python3 -m unittest discover -s tests -v`
 
 **명령 등록:** 각 단계는 그 단계에서 구현하는 명령만 등록한다. 구현 전 명령용 임시 코드는 만들지 않는다.
 
@@ -164,11 +164,11 @@
 ### 기초
 
 **1단계. 패키지 뼈대** (E08)
-- 준비: `python3 -m venv .venv`로 가상환경을 만들고, 활성화한 뒤 `python --version`이 3.10 이상인지 확인
-- 파일: `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `.venv/`, `data/`, `__pycache__/`, `demo-data/`, `export.csv` 추가
+- 준비: `python3 --version`이 3.10 이상인지 확인
+- 파일: `__main__.py`, `cli.py`, `tests/test_cli.py`, `.gitignore`에 `data/`, `__pycache__/`, `demo-data/`, `export.csv` 추가
 - 만드는 것: `build_parser() -> argparse.ArgumentParser`, `main(argv: list[str] | None = None) -> int`, `--data-dir`. 잘못된 옵션은 `[오류]`, `[힌트]`와 종료 코드 2로 처리
 - 테스트: 최상위 `--help`가 종료 코드 0, 없는 옵션과 명령 없는 실행은 종료 코드 2이며 스택트레이스 없음
-- 직접 실행: `python -m budget_app --help`
+- 직접 실행: `python3 -m budget_app --help`
 
 **2단계. 모델과 입력 검증** (E09, E13)
 - 파일: `models.py`, `errors.py`, `tests/test_models.py`
@@ -277,7 +277,7 @@
 **18단계. 전체 점검과 시연 순서표** (E01~E07)
 - 파일: `docs/demo.md`
 - 내용: `--data-dir ./demo-data`로 실제 데이터와 분리한 시연 순서. 평가 항목별 명령, 기대 결과, 실패 시 대처, 재실행을 위한 초기화 방법(`demo-data/`와 이전 `export.csv` 삭제)을 담는다.
-- 확인: `.venv`에서 전체 테스트를 실행하고, 사용자가 순서표대로 시연을 직접 진행한다.
+- 확인: `python3`으로 전체 테스트를 실행하고, 사용자가 순서표대로 시연을 직접 진행한다.
 - 선택: 다른 환경에서 실행할 가능성이 있으면 `uv`로 Python 3.10을 받아 테스트를 한 번 실행한다. 수행 여부는 이 단계에서 사용자에게 묻는다.
 
 **19단계. 검토와 수정** (전체)
