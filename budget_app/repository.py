@@ -22,6 +22,8 @@ def read_jsonl(path: Path) -> Iterator[tuple[int, dict[str, Any]]]:
     """파일 전체를 올리지 않고 줄 번호와 내용을 한 줄씩 돌려준다."""
     with path.open(encoding="utf-8") as file:
         for line_number, line in enumerate(file, start=1):
+            if not line.strip():
+                continue
             try:
                 record = json.loads(line)
             except json.JSONDecodeError as error:

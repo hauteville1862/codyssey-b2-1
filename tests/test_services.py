@@ -35,6 +35,13 @@ class CategoryServiceTest(ServiceTestCase):
                 with self.assertRaises(BudgetAppError):
                     self.service.add_category(name)
 
+    def test_blank_line_in_category_file_does_not_stop_the_program(self) -> None:
+        (self.data_dir / "categories.jsonl").write_text(
+            '{"name": "food"}\n\n', encoding="utf-8"
+        )
+
+        self.assertEqual(BudgetService(self.data_dir).list_categories(), ["food"])
+
     def test_damaged_category_line_reports_line_number(self) -> None:
         (self.data_dir / "categories.jsonl").write_text(
             '{"name": "food"}\n{"wrong": 1}\n', encoding="utf-8"

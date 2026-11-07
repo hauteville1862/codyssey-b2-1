@@ -45,6 +45,21 @@ class TransactionRepositoryTest(unittest.TestCase):
         with self.assertRaises(BudgetAppError):
             next(transactions)
 
+    def test_blank_lines_are_skipped(self) -> None:
+        self.path.write_text("\n" + VALID_LINE + "   \n\n", encoding="utf-8")
+
+        self.assertEqual(
+            [tx.id for tx in self.repository.iter_all()], ["TX-000001"]
+        )
+
+    def test_blank_line_still_counts_for_damaged_line_number(self) -> None:
+        self.path.write_text(VALID_LINE + "\n{broken\n", encoding="utf-8")
+
+        with self.assertRaises(BudgetAppError) as caught:
+            list(self.repository.iter_all())
+
+        self.assertIn("3번째 줄", caught.exception.message)
+
     def test_special_characters_in_memo_stay_on_one_line(self) -> None:
         memo = '점심, "김밥"\n둘째 줄'
 
