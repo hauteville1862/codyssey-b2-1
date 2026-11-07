@@ -31,6 +31,25 @@ def append_jsonl(path: Path, record: dict[str, Any]) -> None:
         file.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+class CategoryStore:
+    """카테고리 파일을 읽고 쓴다."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def list_all(self) -> list[str]:
+        names = []
+        for line_number, record in read_jsonl(self.path):
+            name = record.get("name")
+            if not isinstance(name, str) or not name:
+                raise _damaged_line(self.path, line_number)
+            names.append(name)
+        return names
+
+    def add(self, name: str) -> None:
+        append_jsonl(self.path, {"name": name})
+
+
 class TransactionRepository:
     """거래 파일을 읽고 쓰는 책임만 맡는다. 업무 규칙은 서비스가 맡는다."""
 
