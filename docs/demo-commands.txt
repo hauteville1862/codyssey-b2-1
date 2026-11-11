@@ -1,0 +1,63 @@
+# 시연 명령 모음. 설명과 기대 결과는 docs/demo.md에 있습니다.
+# "↳" 줄은 입력할 값입니다. 명령 줄만 복사해 붙이세요.
+
+[0] 준비와 초기화
+python3 --version
+rm -rf demo-data export.csv
+cat demo
+
+[1] 첫 실행과 카테고리 (E02, E03)
+./demo category list
+ls demo-data
+./demo category add
+    ↳ 입력: pet
+./demo category remove
+    ↳ 입력: pet
+
+[2] 거래 추가와 가져오기 (E01, E05)
+./demo add
+    ↳ 입력: 2024-01-15 / expense / food / 15000 / 점심 / meal
+./demo import --from samples/import_ok.csv
+./demo list --limit 3
+
+[3] 검색 (E01)
+./demo search --from 2024-01-10 --to 2024-01-15
+./demo search --category food --type expense
+./demo search --q 점심
+./demo search --tag lunch
+
+[4] 수정과 삭제 (E01)
+./demo update --id TX-000001 --amount 20000 --memo "저녁"
+./demo delete --id TX-000005
+./demo list
+
+[5] 사용 중인 카테고리 삭제 (E03, E06, E07)
+./demo category remove; echo $?
+    ↳ 입력: food
+
+[6] 요약과 예산 (E01, E04)
+./demo budget set --month 2024-01 --amount 500000
+./demo summary --month 2024-01 --top 3
+./demo budget set --month 2024-01 --amount 100000
+./demo summary --month 2024-01 --top 3
+./demo summary --month 2024-02
+
+[7] CSV 내보내기와 깨진 파일 가져오기 (E01, E05, E06, E07)
+./demo export --out export.csv --month 2024-01
+cat export.csv
+./demo import --from samples/import_broken.csv; echo $?
+./demo list
+
+[8] 오류 처리와 종료 코드 (E06, E07)
+./demo summary --month 2024-13; echo $?
+./demo delete --id TX-999999; echo $?
+./demo export --out export.csv --month 2024-01; echo $?
+./demo import --from samples/no_such_file.csv; echo $?
+./demo list --unknown-option; echo $?
+./demo add; echo $?
+    ↳ 입력: 2024-13-40 → 날짜를 다시 물으면 Ctrl+C
+
+[9] 재실행 후 유지 (E02) - 새 터미널을 열고 프로젝트 폴더에서 실행
+./demo list --limit 1
+./demo summary --month 2024-01 --top 1
+./demo category list
