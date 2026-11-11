@@ -14,6 +14,11 @@ from budget_app.models import (
 )
 from budget_app.services import BudgetService, MonthlySummary, SearchFilters
 
+try:
+    import readline  # 불러오기만 해도 input()이 한글 지우기와 화살표 키를 처리한다.
+except ImportError:  # 윈도우에는 readline이 없다.
+    pass
+
 PROG = "python3 -m budget_app"
 
 T = TypeVar("T")

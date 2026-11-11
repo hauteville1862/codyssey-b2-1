@@ -600,5 +600,21 @@ class HandleErrorsTest(unittest.TestCase):
                 self.assertNotIn("Traceback", stderr)
 
 
+class LineEditingTest(unittest.TestCase):
+    """한글 지우기와 화살표 키는 readline이 처리한다. 여기서는 불러오는지만 확인한다."""
+
+    @unittest.skipIf(sys.platform == "win32", "윈도우에는 readline이 없다.")
+    def test_cli_loads_readline_for_line_editing(self) -> None:
+        code = "import sys, budget_app.cli; print('readline' in sys.modules)"
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.stdout.strip(), "True")
+
+
 if __name__ == "__main__":
     unittest.main()
