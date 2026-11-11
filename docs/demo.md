@@ -115,11 +115,12 @@ TX-000002 | 2024-01-05 | income | salary | 3000000 | 1월 월급 |
 ## 5. 사용 중인 카테고리 삭제 (E03, E06, E07)
 
 ```bash
-./demo category remove
-echo $?
+./demo category remove; echo $?
 ```
 
 입력: `food`
+
+줄 끝의 `; echo $?`는 앞 명령이 끝나면 그 종료 코드를 바로 출력합니다. 앞 명령이 실패해도 실행됩니다.
 
 기대 결과: `[오류] 사용 중인 카테고리는 삭제할 수 없습니다: food (2건)`, `[힌트]`, 종료 코드 `1`
 
@@ -169,8 +170,7 @@ date,type,category,amount,memo,tags
 ```
 
 ```bash
-./demo import --from samples/import_broken.csv
-echo $?
+./demo import --from samples/import_broken.csv; echo $?
 ./demo list
 ```
 
@@ -178,19 +178,14 @@ echo $?
 
 ## 8. 오류 처리와 종료 코드 (E06, E07)
 
-아래 명령을 한 줄씩 실행하고, 바로 다음의 `echo $?`로 종료 코드를 보여 줍니다.
+아래 명령을 한 줄씩 실행합니다. 줄 끝의 `; echo $?`가 오류 문구 바로 아래에 종료 코드를 보여 줍니다.
 
 ```bash
-./demo summary --month 2024-13
-echo $?
-./demo delete --id TX-999999
-echo $?
-./demo export --out export.csv --month 2024-01
-echo $?
-./demo import --from samples/no_such_file.csv
-echo $?
-./demo list --unknown-option
-echo $?
+./demo summary --month 2024-13; echo $?
+./demo delete --id TX-999999; echo $?
+./demo export --out export.csv --month 2024-01; echo $?
+./demo import --from samples/no_such_file.csv; echo $?
+./demo list --unknown-option; echo $?
 ```
 
 | 명령 | 기대 결과 | 종료 코드 |
@@ -208,8 +203,7 @@ echo $?
 잘못된 입력을 다시 묻는 동작은 `add`로 보여 줍니다.
 
 ```bash
-./demo add
-echo $?
+./demo add; echo $?
 ```
 
 입력: `2024-13-40`을 입력해 `[오류] 날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).`와 `[힌트] 예: 2024-01-15`를 본 뒤, 날짜를 다시 묻는 곳에서 `Ctrl+C`를 누릅니다.
