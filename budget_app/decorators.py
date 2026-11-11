@@ -25,6 +25,7 @@ def handle_errors(func: Handler) -> Handler:
         except BudgetAppError as error:
             return report_error(error.message, error.hint)
         except (KeyboardInterrupt, EOFError):
+            print(file=sys.stderr)  # 끊긴 입력 줄에 붙지 않도록 줄을 바꾼다.
             return report_error("입력이 중단되었습니다.", "명령을 다시 실행하세요.")
         except OSError as error:
             return report_error(

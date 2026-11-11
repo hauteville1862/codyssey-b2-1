@@ -599,6 +599,18 @@ class HandleErrorsTest(unittest.TestCase):
                 self.assertIn("[힌트]", stderr)
                 self.assertNotIn("Traceback", stderr)
 
+    def test_interrupted_input_prints_error_on_next_line(self) -> None:
+        failures: list[BaseException] = [KeyboardInterrupt(), EOFError()]
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                code, stderr = self.run_failing(failure)
+
+                self.assertEqual(code, 1)
+                self.assertEqual(
+                    stderr,
+                    "\n[오류] 입력이 중단되었습니다.\n[힌트] 명령을 다시 실행하세요.\n",
+                )
+
 
 class LineEditingTest(unittest.TestCase):
     """한글 지우기와 화살표 키는 readline이 처리한다. 여기서는 불러오는지만 확인한다."""
