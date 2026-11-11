@@ -158,7 +158,15 @@ echo $?
 cat export.csv
 ```
 
-기대 결과: `[완료] export.csv (4 records)` 다음에 헤더 `date,type,category,amount,memo,tags`와 거래 4줄이 나옵니다.
+기대 결과: `[완료] export.csv (4 records)` 다음에 아래 내용이 나옵니다. 거래 줄은 `list`와 달리 추가한 순서(id 순)입니다. `export`는 저장 파일을 한 줄씩 읽어 바로 쓰고, 날짜순으로 다시 정리하지 않기 때문입니다.
+
+```text
+date,type,category,amount,memo,tags
+2024-01-15,expense,food,20000,저녁,meal
+2024-01-05,income,salary,3000000,1월 월급,
+2024-01-10,expense,rent,150000,월세,
+2024-01-15,expense,food,15000,"점심, 김밥","meal,lunch"
+```
 
 ```bash
 ./demo import --from samples/import_broken.csv
